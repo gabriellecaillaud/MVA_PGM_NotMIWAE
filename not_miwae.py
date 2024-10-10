@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
 import numpy as np
-import datetime
+import torchrl
 
 
 class VAEncoder(nn.Module):
@@ -185,123 +185,106 @@ def compute_classic_ELBO(q_z, log_p_x_given_z):
     return elbo
 
 
-
-
 class notMIWAE(nn.Module):
-    def __init__(self, X, Xval,
-                 n_latent=50, n_hidden=100, n_samples=1,
-                 activation=nn.Tanh(),
-                 out_dist='gauss',
-                 out_activation=None,
-                 learnable_imputation=False,
-                 permutation_invariance=False,
-                 embedding_size=20,
-                 code_size=20,
-                 missing_process='selfmask',
-                 testing=False,
-                 name='/tmp/notMIWAE'):
-
+    def __init__(self, nb_features, n_latent=50, n_hidden=100, n_samples=1,
+                 activation=nn.Tanh(), out_dist='gauss', out_activation=None,
+                 learnable_imputation=False, missing_process='selfmask',
+                 testing=False):
         super(notMIWAE, self).__init__()
 
-        # ---- data
-        self.Xorg = X.copy()
-        self.Xval_org = Xval.copy()
-        self.n, self.d = X.shape
-
-        # ---- missing
-        self.S = np.array(~np.isnan(X), dtype=np.float32)
-        self.Sval = np.array(~np.isnan(Xval), dtype=np.float32)
-
-        if np.sum(self.S) < self.d * self.n:
-            self.X = self.Xorg.copy()
-            self.X[np.isnan(self.X)] = 0
-            self.Xval = self.Xval_org.copy()
-            self.Xval[np.isnan(self.Xval)] = 0
-        else:
-            self.X = self.Xorg
-            self.Xval = self.Xval_org
-
-        # ---- settings
+        # Model settings
+        self.nb_features = nb_features
         self.n_latent = n_latent
         self.n_hidden = n_hidden
         self.n_samples = n_samples
         self.activation = activation
         self.out_dist = out_dist
         self.out_activation = out_activation
-        self.embedding_size = embedding_size
-        self.code_size = code_size
         self.missing_process = missing_process
         self.testing = testing
         self.batch_pointer = 0
-        self.eps = np.finfo(float).eps
+        self.eps = torch.finfo(torch.float32).eps
 
-        # ---- input
-        self.x_pl = None
-        self.s_pl = None
-        self.n_pl = None
+        # Encoder
+        self.encoder = VAEncoder(self.n_hidden, self.n_latent, self.activation)
+
+        # Decoder
+        if out_dist in ['gauss', 'normal', 'truncated_normal']:
+            self.decoder = GaussDecoder(self.n_hidden, self.nb_features, self.activation, self.out_activation)
+        elif out_dist == 'bern':
+            self.decoder = BernoulliDecoder(self.n_hidden, self.nb_features, self.activation)
+        elif out_dist in ['t', 't-distribution']:
+            self.decoder = TDecoder(self.n_hidden, self.nb_features, self.activation, self.out_activation)
+
+        # Missing process
+        self.missing_decoder = BernoulliDecoderMiss(self.n_hidden, self.nb_features,  missing_process)
 
         if learnable_imputation and not testing:
             self.imp = nn.Parameter(torch.randn(1, self.d))
 
-        # ---- encoder
-        self.encoder = nn.Sequential(
-            nn.Linear(self.d, self.n_hidden),
-            self.activation,
-            nn.Linear(self.n_hidden, self.n_latent * 2)
-        )
+    def forward(self, x, s):
+        # Encoder
+        q_mu, q_log_var = self.encoder(x)
 
-        # ---- decoder
-        if out_dist in ['gauss', 'normal', 'truncated_normal']:
-            self.decoder = nn.Sequential(
-                nn.Linear(self.n_latent, self.n_hidden),
-                self.activation,
-                nn.Linear(self.n_hidden, self.d * 2)
-            )
-        elif out_dist == 'bern':
-            self.decoder = nn.Sequential(
-                nn.Linear(self.n_latent, self.n_hidden),
-                self.activation,
-                nn.Linear(self.n_hidden, self.d)
-            )
-        elif out_dist in ['t', 't-distribution']:
-            self.decoder = nn.Sequential(
-                nn.Linear(self.n_latent, self.n_hidden),
-                self.activation,
-                nn.Linear(self.n_hidden, self.d * 3)
-            )
+        # Reparameterization trick
+        q_z = dist.Normal(q_mu, torch.exp(0.5 * q_log_var))
+        # Sample from the normal dist
+        z = q_z.rsample((self.n_samples,))
+        z = z.permute(1, 0, 2)
 
-        # ---- missing process
-        self.missing_decoder = nn.Sequential(
-            nn.Linear(self.d, self.n_hidden),
-            self.activation,
-            nn.Linear(self.n_hidden, self.d)
-        )
+        # Decoder
+        p_x_given_z = None
+        if self.out_dist in ['gauss', 'normal', 'truncated_normal']:
+            mu, std = self.decoder(z)
+            if self.out_dist == 'truncated_normal':
+                p_x_given_z = torchrl.modules.TruncatedNormal(loc=mu, scale=std, min=0.0, max=1.0)
+            else:
+                p_x_given_z = dist.Normal(mu, std)
+        elif self.out_dist == 'bern':
+            logits = self.decoder(z)
+            p_x_given_z = dist.Bernoulli(logits=logits)
+        elif self.out_dist in ['t', 't-distribution']:
+            mu, log_sigma, df = self.decoder(z)
+            p_x_given_z = dist.StudentT(df=3 + F.softplus(df), loc=mu, scale=F.softplus(log_sigma) + 0.0001)
+        else:
+            raise ValueError("out_dist is not recognized.")
 
-        # ---- optimizer
-        # self.optimizer = optim.Adam(self.parameters())
+        # Compute log probabilities
+        # TODO verify dims
+        log_p_x_given_z = p_x_given_z.log_prob(x.unsqueeze(0).expand(self.n_samples, -1, -1))
+        log_p_x_given_z = (log_p_x_given_z * s.unsqueeze(0)).sum(dim=-1)
 
-    def compute_MIWAE_ELBO(self,lpxz, lqzx, lpz):
-        """
+        # Missing process
+        l_out_mixed = p_x_given_z.sample() * (1 - s).unsqueeze(0) + x.unsqueeze(0) * s.unsqueeze(0)
+        logits_miss = self.missing_decoder(l_out_mixed)
+        # p(s|x)
+        p_s_given_x = dist.Bernoulli(logits=logits_miss)
+        # evaluate s in p(s|x)
+        log_p_s_given_x = p_s_given_x.log_prob(s.unsqueeze(0)).sum(dim=-1)
 
-        :param lpxz:
-        :param lqzx:
-        :param lpz:
-        :return:
-        """
-        # ---- importance weights
-        l_w = lpxz + lpz - lqzx
+        # --- evaluate the z-samples in q(z|x)
+        q_z2 = dist.Normal(loc=q_mu.unsqueeze(1),
+                      scale=torch.sqrt(torch.exp(q_log_var.unsqueeze(1))))
+        log_q_z_given_x = torch.sum(q_z2.log_prob(z), dim=-1)
 
-        # ---- sum over samples using log-sum-exp trick
-        log_sum_w = torch.logsumexp(l_w, dim=1)
+        # ---- evaluate the z-samples in the prior
+        prior = dist.Normal(loc=0.0, scale=1.0)
+        log_p_z = torch.sum(prior.log_prob(z), dim=-1)
 
-        # ---- average over samples
-        log_avg_weight = log_sum_w - torch.log(torch.tensor(n_pl, dtype=torch.float32))
-
-        # ---- average over minibatch to get the average log likelihood
-        return log_avg_weight.mean()
+        return log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z
 
 
+def get_MIWAE(n_samples, lpxz, lqzx, lpz):
+    l_w = lpxz + lpz - lqzx
+    log_sum_w = torch.logsumexp(l_w, dim=0)
+    log_avg_weight = log_sum_w - torch.log(torch.tensor(n_samples, dtype=torch.float32))
+    return log_avg_weight.mean()
 
+def get_notMIWAE(n_samples, lpxz, lpmz, lqzx, lpz):
+    l_w = lpxz + lpmz + lpz - lqzx
+    log_sum_w = torch.logsumexp(l_w, dim=0)
+    log_avg_weight = log_sum_w - torch.log(torch.tensor(n_samples, dtype=torch.float32))
+    return log_avg_weight.mean()
 
 # Losses
 
@@ -319,7 +302,6 @@ def bernoulli_loss(x, s, y):
     p_x_given_z = x * torch.log(y + eps) + (1 - x) * torch.log(1 - y + eps)
     return torch.sum(s * p_x_given_z, dim=-1)  # sum over d-dimension
 
-
 def bernoulli_loss_miss(x, y):
     eps = torch.finfo(torch.float32).eps
     p_x_given_z = x * torch.log(y + eps) + (1 - x) * torch.log(1 - y + eps)
@@ -328,3 +310,5 @@ def bernoulli_loss_miss(x, y):
 def KL_loss(q_mu, q_log_sig2):
     KL = 1 + q_log_sig2 - q_mu ** 2 - torch.exp(q_log_sig2)
     return - 0.5 * torch.sum(KL, dim=1)
+
+

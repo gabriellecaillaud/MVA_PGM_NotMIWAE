@@ -7,11 +7,12 @@ import torchrl
 
 
 class VAEncoder(nn.Module):
-    def __init__(self, n_hidden, n_latent, activation):
+    def __init__(self, n_input_features, n_hidden, n_latent, activation):
         super(VAEncoder, self).__init__()
+        self.n_input_features = n_input_features
         self.n_hidden = n_hidden
         self.n_latent = n_latent
-        self.linear1 = nn.Linear(in_features=self.n_hidden, out_features=self.n_hidden)  # l_enc1
+        self.linear1 = nn.Linear(in_features=self.n_input_features, out_features=self.n_hidden)  # l_enc1
         self.linear2 = nn.Linear(in_features=self.n_hidden, out_features=self.n_hidden)  # l_enc2
         self.mu_layer = nn.Linear(in_features=self.n_hidden, out_features=self.n_latent)  # q_mu
         self.log_var_layer = nn.Linear(in_features=self.n_hidden, out_features=self.n_latent)  # q_log_sigma
@@ -32,11 +33,12 @@ class VAEncoder(nn.Module):
 
 
 class GaussDecoder(nn.Module):
-    def __init__(self, n_hidden, out_dim, activation, out_activation):
+    def __init__(self, n_latent,  n_hidden, out_dim, activation, out_activation):
         super(GaussDecoder, self).__init__()
+        self.n_latent = n_latent
         self.n_hidden = n_hidden
         self.out_dim = out_dim
-        self.fc1 = nn.Linear(in_features=self.n_hidden, out_features=self.n_hidden)
+        self.fc1 = nn.Linear(in_features=self.n_latent, out_features=self.n_hidden)
         self.fc2 = nn.Linear(in_features=self.n_hidden, out_features=self.n_hidden)
         self.mu_layer = nn.Linear(in_features=self.n_hidden, out_features=self.out_dim)
         self.std_layer = nn.Linear(in_features=n_hidden, out_features=self.out_dim)
@@ -51,16 +53,16 @@ class GaussDecoder(nn.Module):
         mu = self.out_activation(self.mu_layer(z))
         std = F.softplus(self.std_layer(z))
 
-        return mu, std
+        return mu, std + 1e-8
 
 
 class BernoulliDecoder(nn.Module):
-    def __init__(self, n_hidden, d, activation):
+    def __init__(self, n_latent, n_hidden, d, activation):
         super(BernoulliDecoder, self).__init__()
-
+        self.n_latent = n_latent
         self.hidden_dim = n_hidden
         self.out_dim     = d
-        self.fc1 = nn.Linear(in_features=self.n_hidden, out_features=self.n_hidden)
+        self.fc1 = nn.Linear(in_features=self.n_latent, out_features=self.n_hidden)
         self.fc2 = nn.Linear(in_features=self.n_hidden, out_features=self.n_hidden)
         self.logits_layer = nn.Linear(in_features=self.n_hidden, out_features=self.d)
         self.activation = activation
@@ -75,12 +77,12 @@ class BernoulliDecoder(nn.Module):
 
 
 class TDecoder(nn.Module):
-    def __init__(self, n_hidden, d, activation, out_activation):
+    def __init__(self, n_latent,  n_hidden, d, activation, out_activation):
         super(TDecoder, self).__init__()
-
+        self.n_latent = n_latent
         self.n_hidden = n_hidden
         self.out_dim = d
-        self.fc1 = nn.Linear(in_features=self.n_hidden, out_features=self.n_hidden)
+        self.fc1 = nn.Linear(in_features=self.n_latent, out_features=self.n_hidden)
         self.fc2 = nn.Linear(in_features=self.n_hidden, out_features=self.n_hidden)
 
         self.mu_layer = nn.Linear(in_features=self.n_hidden, out_features=self.out_dim)
@@ -120,18 +122,18 @@ class TDecoder(nn.Module):
 
 
 class BernoulliDecoderMiss(nn.Module):
-    def __init__(self, n_hidden, d, missing_process):
+    def __init__(self, n_latent, n_hidden, d, missing_process):
         super(BernoulliDecoderMiss, self).__init__()
-
+        self.n_latent = n_latent
         self.n_hidden = n_hidden
         self.d = d
         self.missing_process = missing_process  # Type of missing process
 
         # Define layers for 'linear' and 'nonlinear' cases
         if missing_process == 'linear' or missing_process == 'nonlinear':
-            self.fc1 = nn.Linear(in_features=n_hidden, out_features=d)  # Linear case: 1 dense layer
+            self.fc1 = nn.Linear(in_features=n_latent, out_features=d)  # Linear case: 1 dense layer
             if missing_process == 'nonlinear':
-                self.fc_hidden = nn.Linear(in_features=n_hidden, out_features=n_hidden)  # Nonlinear: hidden layer
+                self.fc_hidden = nn.Linear(in_features=n_latent, out_features=n_latent)  # TODO change output dim # Nonlinear: hidden layer
 
         # Define trainable parameters for 'selfmasking' and 'selfmasking_known' cases
         if missing_process == 'selfmasking' or missing_process == 'selfmasking_known':
@@ -186,14 +188,14 @@ def compute_classic_ELBO(q_z, log_p_x_given_z):
 
 
 class notMIWAE(nn.Module):
-    def __init__(self, nb_features, n_latent=50, n_hidden=100, n_samples=1,
-                 activation=nn.Tanh(), out_dist='gauss', out_activation=None,
-                 learnable_imputation=False, missing_process='selfmask',
+    def __init__(self, n_input_features, n_latent=50, n_hidden=100, n_samples=1,
+                 activation=nn.Tanh(), out_dist='gauss', out_activation=torch.nn.functional.relu,
+                 learnable_imputation=False, missing_process='selfmasking',
                  testing=False):
         super(notMIWAE, self).__init__()
 
         # Model settings
-        self.nb_features = nb_features
+        self.n_input_features = n_input_features
         self.n_latent = n_latent
         self.n_hidden = n_hidden
         self.n_samples = n_samples
@@ -206,18 +208,18 @@ class notMIWAE(nn.Module):
         self.eps = torch.finfo(torch.float32).eps
 
         # Encoder
-        self.encoder = VAEncoder(self.n_hidden, self.n_latent, self.activation)
+        self.encoder = VAEncoder(self.n_input_features, self.n_hidden, self.n_latent, self.activation)
 
         # Decoder
         if out_dist in ['gauss', 'normal', 'truncated_normal']:
-            self.decoder = GaussDecoder(self.n_hidden, self.nb_features, self.activation, self.out_activation)
+            self.decoder = GaussDecoder(self.n_latent, self.n_hidden, self.n_input_features, self.activation, self.out_activation)
         elif out_dist == 'bern':
-            self.decoder = BernoulliDecoder(self.n_hidden, self.nb_features, self.activation)
+            self.decoder = BernoulliDecoder(self.n_latent, self.n_hidden, self.n_input_features, self.activation)
         elif out_dist in ['t', 't-distribution']:
-            self.decoder = TDecoder(self.n_hidden, self.nb_features, self.activation, self.out_activation)
+            self.decoder = TDecoder(self.n_latent, self.n_hidden, self.n_input_features, self.activation, self.out_activation)
 
         # Missing process
-        self.missing_decoder = BernoulliDecoderMiss(self.n_hidden, self.nb_features,  missing_process)
+        self.missing_decoder = BernoulliDecoderMiss(self.n_latent, self.n_hidden, self.n_input_features,  missing_process)
 
         if learnable_imputation and not testing:
             self.imp = nn.Parameter(torch.randn(1, self.d))
@@ -241,6 +243,7 @@ class notMIWAE(nn.Module):
             else:
                 p_x_given_z = dist.Normal(mu, std)
         elif self.out_dist == 'bern':
+            mu = None
             logits = self.decoder(z)
             p_x_given_z = dist.Bernoulli(logits=logits)
         elif self.out_dist in ['t', 't-distribution']:
@@ -271,7 +274,7 @@ class notMIWAE(nn.Module):
         prior = dist.Normal(loc=0.0, scale=1.0)
         log_p_z = torch.sum(prior.log_prob(z), dim=-1)
 
-        return log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z
+        return mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z
 
 
 def get_MIWAE(n_samples, lpxz, lqzx, lpz):

@@ -3,54 +3,13 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import TensorDataset, DataLoader
 import datetime
-from mva_project.MVA_PGM_NotMIWAE.data_imputation import compute_rmse
-from mva_project.MVA_PGM_NotMIWAE.not_miwae import notMIWAE, get_notMIWAE
+from data_imputation import compute_rmse
+from not_miwae import notMIWAE, get_notMIWAE
 from sklearn.model_selection import train_test_split
 import logging
 import random, os
-
-def seed_everything(seed: int):
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = True
-
-def introduce_missing(X):
-    print("Introducing missing data with > mean")
-    N, D = X.shape
-    Xnan = X.copy()
-
-    # ---- MNAR in D/2 dimensions
-    mean = np.mean(Xnan[:, :int(D / 2)], axis=0)
-    ix_larger_than_mean = Xnan[:, :int(D / 2)] > mean
-    Xnan[:, :int(D / 2)][ix_larger_than_mean] = np.nan
-
-    Xnan = Xnan.astype(np.float32)
-    Xz = Xnan.copy()
-    Xz[np.isnan(Xnan.astype(np.float32))] = 0
-
-    return Xnan, Xz
-
-def introduce_missing_extreme_values(X, percentile_extreme = 25):
-    print("Introducing missing data via removing extreme values")
-    N, D = X.shape
-    Xnan = X.copy()
-
-    # ---- MNAR in D/2 dimensions
-    lower_bound = np.percentile(Xnan[:, :int(D / 2)], percentile_extreme, axis=0)
-    upper_bound = np.percentile(Xnan[:, :int(D / 2)], 100 - percentile_extreme, axis=0)
-
-    ix_lower = Xnan[:, :int(D / 2)] < lower_bound
-    ix_higher = Xnan[:, :int(D / 2)] > upper_bound
-    Xnan[:, :int(D / 2)][ix_lower | ix_higher] = np.nan
-    Xnan = Xnan.astype(np.float32)
-    Xz = Xnan.copy()
-    Xz[np.isnan(Xnan)] = 0
-
-    return Xnan, Xz
+from introduce_missing_data import introduce_missing_extreme_values, introduce_missing_mean_values, introduce_missing
+from utils import seed_everything
 
 
 def train_notMIWAE(model, train_loader, val_loader, optimizer, scheduler, num_epochs, total_samples_x_train, device):
@@ -104,7 +63,7 @@ if __name__ == "__main__":
     print(date)
 
     calib_config = [{'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'nonlinear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
-                    {'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 't'}
+                    {'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking_known', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 't'}
                     ][-1]
 
     seed_everything(calib_config['random_seed'])
@@ -129,8 +88,8 @@ if __name__ == "__main__":
     Xval = (Xval - mean_train) / std_train
 
     # Introduce missing data to features (only in X, not y)
-    Xnan_train, Xz_train = introduce_missing_extreme_values(Xtrain)  # Assuming introduce_missing is defined elsewhere
-    Xnan_val, Xz_val = introduce_missing_extreme_values(Xval)
+    Xnan_train, Xz_train = introduce_missing_mean_values(Xtrain)  # Assuming introduce_missing is defined elsewhere
+    Xnan_val, Xz_val = introduce_missing_mean_values(Xval)
 
     # ytrain_tensor = torch.tensor(ytrain, dtype=torch.float32)
     # yval_tensor = torch.tensor(yval, dtype=torch.float32)

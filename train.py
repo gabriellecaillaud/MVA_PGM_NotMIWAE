@@ -3,8 +3,9 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import TensorDataset, DataLoader
 import datetime
-from data_imputation import compute_rmse
-from not_miwae import notMIWAE, get_notMIWAE, get_MIWAE
+from data_imputation import compute_imputation_rmse_miwae,compute_imputation_rmse_not_miwae
+from miwae import get_MIWAE, Miwae
+from not_miwae import notMIWAE, get_notMIWAE
 from sklearn.model_selection import train_test_split
 import logging
 from introduce_missing_data import introduce_missing_extreme_values, introduce_missing_mean_values, introduce_missing
@@ -19,6 +20,7 @@ def train_notMIWAE(model, train_loader, val_loader, optimizer, scheduler, num_ep
         train_loss  = 0
         train_rmse  = 0
         for batch_idx, (x, s, xtrue) in enumerate(train_loader):
+            model.train()
             x, s, xtrue = x.to(device), s.to(device), xtrue.to(device)
             optimizer.zero_grad()
             mu, lpxz, lpmz, lqzx, lpz = model(x, s, total_samples_x_train)
@@ -28,9 +30,11 @@ def train_notMIWAE(model, train_loader, val_loader, optimizer, scheduler, num_ep
             scheduler.step()
             train_loss += loss.item()
 
+            model.eval()
             # compute rmse on batch
-            batch_rmse = compute_rmse(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
-            train_rmse += batch_rmse
+            with torch.no_grad():
+                batch_rmse = compute_imputation_rmse_not_miwae(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
+                train_rmse += batch_rmse
 
         train_loss /= len(train_loader)
         train_rmse /= len(train_loader)
@@ -44,7 +48,7 @@ def train_notMIWAE(model, train_loader, val_loader, optimizer, scheduler, num_ep
                 mu, lpxz, lpmz, lqzx, lpz   = model(x, s, total_samples_x_train)
                 loss            = -get_notMIWAE(total_samples_x_train, lpxz, lpmz, lqzx, lpz)
                 val_loss        += loss.item()
-                batch_rmse      = compute_rmse(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
+                batch_rmse      = compute_imputation_rmse_not_miwae(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
                 val_rmse        += batch_rmse
         val_loss /= len(val_loader)
         val_rmse /= len(val_loader)
@@ -53,6 +57,7 @@ def train_notMIWAE(model, train_loader, val_loader, optimizer, scheduler, num_ep
             torch.save(model.state_dict(), f"temp/not_miwae_{date}_best_val_loss.pt")
 
         print(f'Epoch {(epoch + 1):4.0f}, Train Loss: {train_loss:8.4f} , Train rmse: {train_rmse:7.4f} , Val Loss: {val_loss:8.4f} , Val RMSE: {val_rmse:7.4f}  last value of lr: {scheduler.get_last_lr()[-1]:.4f}')
+
 
 def train_MIWAE(model, train_loader, val_loader, optimizer, scheduler, num_epochs, total_samples_x_train, device):
     model.to(device)
@@ -64,18 +69,21 @@ def train_MIWAE(model, train_loader, val_loader, optimizer, scheduler, num_epoch
         train_loss  = 0
         train_rmse  = 0
         for batch_idx, (x, s, xtrue) in enumerate(train_loader):
+            model.train()
             x, s, xtrue = x.to(device), s.to(device), xtrue.to(device)
             optimizer.zero_grad()
-            mu, lpxz, lpmz, lqzx, lpz = model(x, s, total_samples_x_train)
+            mu, lpxz, lqzx, lpz = model(x, s, total_samples_x_train)
             loss = -get_MIWAE(total_samples_x_train, lpxz, lqzx, lpz)
             loss.backward()
             optimizer.step()
             scheduler.step()
             train_loss += loss.item()
 
-            # compute rmse on batch
-            batch_rmse = compute_rmse(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
-            train_rmse += batch_rmse
+            model.eval()
+            with torch.no_grad():
+                # compute rmse on batch
+                batch_rmse = compute_imputation_rmse_miwae(mu, lpxz, lqzx, lpz, xtrue, s)
+                train_rmse += batch_rmse
 
         train_loss /= len(train_loader)
         train_rmse /= len(train_loader)
@@ -86,10 +94,10 @@ def train_MIWAE(model, train_loader, val_loader, optimizer, scheduler, num_epoch
         with torch.no_grad():
             for x, s, xtrue in val_loader:
                 x, s, xtrue = x.to(device), s.to(device), xtrue.to(device)
-                mu, lpxz, lpmz, lqzx, lpz   = model(x, s, total_samples_x_train)
-                loss            = -get_notMIWAE(total_samples_x_train, lpxz, lpmz, lqzx, lpz)
+                mu, lpxz, lqzx, lpz   = model(x, s, total_samples_x_train)
+                loss            = -get_MIWAE(total_samples_x_train, lpxz, lqzx, lpz)
                 val_loss        += loss.item()
-                batch_rmse      = compute_rmse(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
+                batch_rmse      = compute_imputation_rmse_miwae(mu, lpxz, lqzx, lpz, xtrue, s)
                 val_rmse        += batch_rmse
         val_loss /= len(val_loader)
         val_rmse /= len(val_loader)
@@ -106,9 +114,10 @@ if __name__ == "__main__":
     date = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     print(date)
 
-    calib_config = [{'dataset_name':  'cancer', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'nonlinear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
-                    {'dataset_name':  'cancer', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking_known', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 't'},
-                    {'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking_known', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
+    calib_config = [{'model': 'not_miwae', 'dataset_name':  'cancer', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'nonlinear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
+                    {'model': 'not_miwae','dataset_name':  'cancer', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking_known', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 't'},
+                    {'model': 'not_miwae', 'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'linear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
+                    {'model': 'miwae', 'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
                     ][-1]
 
     seed_everything(calib_config['random_seed'])
@@ -138,8 +147,8 @@ if __name__ == "__main__":
     Xval = (Xval - mean_train) / std_train
 
     # Introduce missing data to features
-    Xnan_train, Xz_train    = introduce_missing_mean_values(Xtrain)  # Assuming introduce_missing is defined elsewhere
-    Xnan_val, Xz_val        = introduce_missing_mean_values(Xval)
+    Xnan_train, Xz_train    = introduce_missing(Xtrain)
+    Xnan_val, Xz_val        = introduce_missing(Xval)
 
     # Create missing data masks (1 if present, 0 if missing)
     Strain  = torch.tensor(~np.isnan(Xnan_train), dtype=torch.float32)
@@ -169,8 +178,13 @@ if __name__ == "__main__":
     val_loader      = DataLoader(val_dataset, batch_size=calib_config['batch_size'], shuffle=False)
 
     logging.info("Dataset prepared. Loading model")
-    model = notMIWAE(n_input_features=Xtrain.shape[1], n_hidden=calib_config['n_hidden'], n_latent = calib_config['n_latent'], missing_process = calib_config['missing_process'], out_dist=calib_config['out_dist'])
 
+    if calib_config['model'] == 'not_miwae':
+        model = notMIWAE(n_input_features=Xtrain.shape[1], n_hidden=calib_config['n_hidden'], n_latent = calib_config['n_latent'], missing_process = calib_config['missing_process'], out_dist=calib_config['out_dist'])
+    elif calib_config['model'] == 'miwae':
+        model = Miwae(n_input_features=Xtrain.shape[1], n_hidden=calib_config['n_hidden'], n_latent = calib_config['n_latent'], out_dist=calib_config['out_dist'])
+    else:
+        raise ValueError('Name of the model to train incorrect.')
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=calib_config['lr'], weight_decay=calib_config['weight_decay'], betas=calib_config['betas'])
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
@@ -182,7 +196,11 @@ if __name__ == "__main__":
                                                     )
     print(f"calib_config:{calib_config}")
     logging.info("Starting training")
-    train_notMIWAE(model, train_loader=train_loader, val_loader=val_loader, optimizer=optimizer, scheduler = scheduler, num_epochs = calib_config['epochs'], total_samples_x_train=total_samples_x_train, device = device)
+    if calib_config['model'] == 'not_miwae':
+        train_notMIWAE(model, train_loader=train_loader, val_loader=val_loader, optimizer=optimizer, scheduler = scheduler, num_epochs = calib_config['epochs'], total_samples_x_train=total_samples_x_train, device = device)
+        torch.save(model.state_dict(), f"temp/not_miwae_{date}_last_epoch.pt")
+    elif calib_config['model'] == 'miwae':
+        train_MIWAE(model, train_loader=train_loader, val_loader=val_loader, optimizer=optimizer, scheduler = scheduler, num_epochs = calib_config['epochs'], total_samples_x_train=total_samples_x_train, device = device)
+        torch.save(model.state_dict(), f"temp/miwae_{date}_last_epoch.pt")
 
-    torch.save(model.state_dict(), f"temp/not_miwae_{date}_last_epoch.pt")
 

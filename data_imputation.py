@@ -82,16 +82,28 @@ def not_imputationRMSE(model, Xorg, Xz, X, S, L):
     return rmse.item(), XM
 
 
-def compute_rmse(mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z, Xtrue, S):
-    mu = torch.exp(mu)  # TODO check if it's really torch.exp
-    # Compute the importance weights
-    wl = softmax(log_p_x_given_z + log_p_s_given_x + log_p_z - log_q_z_given_x)
+def compute_imputation_rmse_not_miwae(mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z, Xtrue, S):
+    with torch.no_grad():
+        mu = torch.exp(mu)
+        # Compute the importance weights
+        wl = softmax(log_p_x_given_z + log_p_s_given_x + log_p_z - log_q_z_given_x)
 
-    # Compute the missing data imputation
-    Xm = torch.sum((mu.T * wl.T).T, dim=0)
-
-    # TODO check dim of xm
-    assert Xm.shape == Xtrue.shape
-    rmse = torch.sqrt(torch.sum((Xtrue - Xm) ** 2 * (1 - S)) / torch.sum(1 - S))
+        # Compute the missing data imputation
+        Xm = torch.sum((mu.T * wl.T).T, dim=0)
+        assert Xm.shape == Xtrue.shape
+        rmse = torch.sqrt(torch.sum((Xtrue - Xm) ** 2 * (1 - S)) / torch.sum(1 - S))
     return rmse
 
+
+def compute_imputation_rmse_miwae(mu, log_p_x_given_z, log_q_z_given_x, log_p_z, Xtrue, S):
+    with torch.no_grad():
+        mu = torch.exp(mu)
+        # Compute the importance weights
+        wl = softmax(log_p_x_given_z  + log_p_z - log_q_z_given_x)
+
+        # Compute the missing data imputation
+        Xm = torch.sum((mu.T * wl.T).T, dim=0)
+
+        assert Xm.shape == Xtrue.shape
+        rmse = torch.sqrt(torch.sum((Xtrue - Xm) ** 2 * (1 - S)) / torch.sum(1 - S))
+    return rmse

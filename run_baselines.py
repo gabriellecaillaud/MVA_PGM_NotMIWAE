@@ -36,8 +36,8 @@ if __name__ == "__main__":
     Xval = (Xval - mean_train) / std_train
 
     # Introduce missing data to features (only in X, not y)
-    Xnan_train, Xz_train = introduce_missing_mean_values(Xtrain)  # Assuming introduce_missing is defined elsewhere
-    Xnan_val, Xz_val = introduce_missing_mean_values(Xval)
+    Xnan_train, Xz_train = introduce_missing(Xtrain)  # Assuming introduce_missing is defined elsewhere
+    Xnan_val, Xz_val = introduce_missing(Xval)
 
     # Create missing data masks (1 if present, 0 if missing)
     Strain = np.array(~np.isnan(Xnan_train), dtype=np.float32)

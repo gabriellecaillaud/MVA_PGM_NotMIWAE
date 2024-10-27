@@ -269,13 +269,6 @@ class notMIWAE(nn.Module):
         return mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z
 
 
-def get_MIWAE(n_samples_importance_sampling, lpxz, lqzx, lpz):
-    l_w             = lpxz + lpz - lqzx
-    log_sum_w       = torch.logsumexp(l_w, dim=0)
-    log_avg_weight  = log_sum_w - torch.log(torch.tensor(n_samples_importance_sampling, dtype=torch.float32))
-    return log_avg_weight.mean()
-
-
 def get_notMIWAE(n_samples_importance_sampling, lpxz, lpmz, lqzx, lpz):
     l_w             = lpxz + lpmz + lpz - lqzx
     log_sum_w       = torch.logsumexp(l_w, dim=0)

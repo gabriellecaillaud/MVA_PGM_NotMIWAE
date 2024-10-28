@@ -53,3 +53,52 @@ def introduce_missing_mean_values(X, percentage_to_remove = 30):
     Xz = Xnan.copy()
     Xz[np.isnan(Xnan)] = 0
     return Xnan, Xz
+
+
+def introduce_missing_random(X, percentage_to_remove=30):
+    """
+    Introduce missing data by randomly removing values from the input matrix
+
+    Args:
+        X: Input numpy array of shape (N, D)
+        percentage_to_remove: Percentage of values to remove (default: 30)
+
+    Returns:
+        tuple: (Array with NaN values, Array with zeros instead of NaN)
+    """
+    print("Introducing random missing data")
+    N, D = X.shape
+    Xnan = X.copy()
+
+    # Calculate total number of elements to remove
+    total_elements = N * D
+    num_to_remove = int(total_elements * percentage_to_remove / 100)
+
+    # Create a flat mask of indices
+    flat_indices = np.arange(total_elements)
+
+    # Randomly select indices to remove
+    indices_to_remove = np.random.choice(
+        flat_indices,
+        size=num_to_remove,
+        replace=False
+    )
+
+    # Convert flat indices to 2D indices
+    rows = indices_to_remove // D
+    cols = indices_to_remove % D
+
+    # Set selected values to NaN
+    Xnan[rows, cols] = np.nan
+    Xnan = Xnan.astype(np.float32)
+
+    # Create version with zeros instead of NaN
+    Xz = Xnan.copy()
+    Xz[np.isnan(Xnan)] = 0
+
+    # Print some statistics
+    missing_count = np.isnan(Xnan).sum()
+    actual_percentage = (missing_count / total_elements) * 100
+    print(f"Removed {missing_count} values ({actual_percentage:.2f}%)")
+
+    return Xnan, Xz

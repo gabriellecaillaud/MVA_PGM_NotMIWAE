@@ -20,7 +20,7 @@ class ZeroBlueTransform:
 
     def __call__(self, img):
         # Convert PIL image to numpy array
-        img_np = np.array(img, dtype=np.float32) / 255.0  # Normalize to [0, 1]
+        img_np = img.astype(np.float32) / 255.0 # Normalize to [0,1]
 
         # Ensure image is in (H, W, C) format
         # if img_np.shape[0] == 3:

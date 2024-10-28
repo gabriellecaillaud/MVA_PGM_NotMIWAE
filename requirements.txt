@@ -3,3 +3,6 @@ torch
 pandas
 scikit-learn
 torchrl
+torchvision
+matplotlib
+opencv-python

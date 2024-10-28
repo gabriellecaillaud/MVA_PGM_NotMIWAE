@@ -127,7 +127,7 @@ if __name__ == "__main__":
                                                 download=False, transform=transform), torch.arange(calib_config['dataset_size']))
 
         test_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=False,
-                                                       download=False, transform=transform), torch.arange(min(calib_config['dataset_size'] / 10, 1000)))
+                                                       download=False, transform=transform), torch.arange(calib_config['dataset_size']))
     else:
         train_set = torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=True,
                                                 download=False, transform=transform)

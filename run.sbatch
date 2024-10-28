@@ -1,0 +1,63 @@
+#!/bin/bash
+## ============== This is the configuration proper to CentraleSupélec's DGX ==============
+## Here it uses the prod20 partition but you can change it to prod10, prod40 or prod80 by commenting/uncommenting the corresponding lines
+
+#SBATCH --job-name=run
+#SBATCH --output=out.txt
+#SBATCH --error=out.txt
+
+## For partition: either prod10, prod 20, prod 40 or prod80
+#SBATCH --partition=prod10
+
+## For gres: either 1g.10gb:[1:10] for prod10, 2g.20gb:[1:4] for prod20, 3g.40gb:1 for prod40 or A100.80gb for prod80.
+
+##SBATCH --partition=prod10
+##SBATCH --gres=gpu:1g.10gb:1
+##SBATCH --cpus-per-task=4
+
+#SBATCH --partition=prod20
+#SBATCH --gres=gpu:2g.20gb:1
+#SBATCH --cpus-per-task=4
+
+##SBATCH --partition=prod40
+##SBATCH --gres=gpu:3g.40gb:1
+##SBATCH --cpus-per-task=4
+
+##SBATCH --partition=prod80
+##SBATCH --gres=gpu:A100.80gb:1
+##SBATCH --ntasks-per-node=1
+##SBATCH --cpus-per-task=8
+##SBATCH --mem-per-cpu=10G
+##SBATCH --nodes=1
+
+## For ntasks and cpus: total requested cpus (ntasks * cpus-per-task) must be in [1: 4 * nMIG] with nMIG = nb_1g.10gb | 2 * nb_2g.20gb | 4 * nb_3g.40gb | 8 * nb_A100.80gb
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+
+## Walltime limit
+#SBATCH --time=24:00:00
+
+## env variables
+
+## in order to not export env variables present at job's submission time to job's env:
+#SBATCH --export=NONE
+
+## To select explicitly exported variables from the caller's environment to the job environment:
+##SBATCH --export=VAR1,VAR2
+## You can also assign values to these exported variables, for example:
+##SBATCH --export=VAR1=10,VAR2=18
+
+
+
+## ============== Run your job here ==============
+
+## Setup
+source /raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/pgm_venv/bin/activate
+cd /raid/home/detectionfeuxdeforet/caillaud_gab/wildfire_detection/mva_pgm/MVA_PGM_NotMIWAE/
+
+# Create a directory to store the logs
+initial_date=$(date +"%Y%m%d_%H%M%S")
+log_dir="logs/run_$initial_date"
+mkdir -p "$log_dir"
+
+python main.py > $log_dir/log.logs 2>&1

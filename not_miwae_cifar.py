@@ -19,34 +19,22 @@ class ZeroBlueTransform:
         self.int_blue = int_blue
 
     def __call__(self, img):
-        # Convert PIL image to numpy array
-        img_np = img.astype(np.float32) / 255.0 # Normalize to [0,1]
+        # Normalize to [0, 1] (assuming img is in range [0, 255])
+        img = img.float() / 255.0
 
-        # Ensure image is in (H, W, C) format
-        # if img_np.shape[0] == 3:
-        #     img_np = np.permute(img_np, (1, 2, 0))
-        #     # Convert RGB to HSV
-        # hsv_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
+        # Create a mask for pixels where blue is the dominant color channel
+        blue_dominant_mask = (img[:, :, 2] > img[:, :, 0]) & (img[:, :, 2] > img[:, :, 1])
 
-        # Create mask for blue intensity condition
-        blue_dominant_mask = (img_np[:, :, 2] > img_np[:, :, 0]) & (img_np[:, :, 2] > img_np[:, :, 1])
-        # blue_mask = img_np[:, :, 2] <= self.int_blue
-
-        # Zero out pixels where blue intensity is greater than `int_blue`
-        img_zero = np.copy(img_np)
+        # Zero out pixels where blue is not dominant
+        img_zero = img.clone()
         img_zero[~blue_dominant_mask] = 0
 
         # Create img_mask (1 if unchanged, 0 if modified)
-        img_mask = np.ones_like(img_np, dtype=np.float32)
+        img_mask = torch.ones_like(img[:, :, 2], dtype=torch.float32)
         img_mask[~blue_dominant_mask] = 0
 
-        # Convert img_zero and img_mask back to tensor format
-        img_zero_tensor = torch.tensor(img_zero) # Shape to (3, 32, 32)
-        img_mask_tensor = torch.tensor(img_mask)
-        img_np_tensor   = torch.tensor(img_np)
-
-        return img_zero_tensor.flatten(), img_mask_tensor.flatten(), img_np_tensor.flatten()
-
+        # Flatten tensors if needed (CIFAR-10 may not require flattening)
+        return img_zero.flatten(), img_mask.flatten(), img.flatten()
 
 
 def imshow(img):

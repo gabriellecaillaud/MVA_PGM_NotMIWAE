@@ -30,7 +30,7 @@ class ZeroBlueTransform:
         img_zero[~blue_dominant_mask] = 0
 
         # Create img_mask (1 if unchanged, 0 if modified)
-        img_mask = torch.ones_like(img[:, :, 2], dtype=torch.float32)
+        img_mask = torch.ones_like(img)
         img_mask[~blue_dominant_mask] = 0
 
         # Flatten tensors if needed (CIFAR-10 may not require flattening)
@@ -95,7 +95,7 @@ def train_notMIWAE_on_cifar10(model, train_loader, val_loader, optimizer, schedu
 
 if __name__ == "__main__":
     calib_config = [
-        {'model': 'not_miwae', 'lr': 5e-4, 'epochs': 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32,
+        {'model': 'not_miwae', 'lr': 5e-4, 'epochs': 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 4,
          'n_hidden': 128, 'n_latent': 100, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
          'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 10},
         ][-1]

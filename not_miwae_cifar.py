@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image
 import cv2
 
-from data_imputation import compute_imputation_rmse_not_miwae
+from data_imputation import compute_imputation_rmse_not_miwae, softmax
 from not_miwae import get_notMIWAE, notMIWAE
 from utils import seed_everything
 
@@ -95,41 +95,6 @@ def train_notMIWAE_on_cifar10(model, train_loader, val_loader, optimizer, schedu
         print(f'Epoch {(epoch + 1):4.0f}, Train Loss: {train_loss:8.4f} , Train rmse: {train_rmse:7.4f} , Val Loss: {val_loss:8.4f} , Val RMSE: {val_rmse:7.4f}  last value of lr: {scheduler.get_last_lr()[-1]:.4f}')
 
 
-def plot_images():
-    transform = transforms.Compose([
-        transforms.ToTensor(),  # Converts PIL image to tensor
-        ZeroBlueTransform(do_flatten=False)
-    ])
-    train_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=True,
-                                                    download=False, transform=transform),
-                       torch.arange(10))
-    dataloader = torch.utils.data.DataLoader(train_set, batch_size=4,
-                                               shuffle=True, num_workers=2)
-
-    data = next(iter(dataloader))
-    img_zero_batch, img_mask_batch, original_batch = data[0]
-    # Plot the images
-    fig, axes = plt.subplots(4, 3, figsize=(10, 12))
-
-    for i in range(4):
-        # Original image
-        axes[i, 0].imshow(original_batch[i].permute(1, 2, 0).numpy())
-        axes[i, 0].set_title("Original")
-        axes[i, 0].axis("off")
-
-        # Transformed image with blue pixels zeroed out
-        axes[i, 1].imshow(img_zero_batch[i].permute(1, 2, 0).numpy())
-        axes[i, 1].set_title("Zero Blue Pixels")
-        axes[i, 1].axis("off")
-
-        # Mask showing unchanged and modified pixels
-        axes[i, 2].imshow(img_mask_batch[i].permute(1, 2, 0).numpy(), cmap="gray")
-        axes[i, 2].set_title("Modification Mask")
-        axes[i, 2].axis("off")
-
-    plt.tight_layout()
-    plt.show()
-
 if __name__ == "__main__":
     calib_config = [
         {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 32,
@@ -181,6 +146,7 @@ if __name__ == "__main__":
                      out_dist=calib_config['out_dist'])
 
     model.to(device)
+    print(f"Number of parameters in the model: {sum (1 if p.requires_grad else 0 for p in model.parameters()) }")
     optimizer = torch.optim.Adam(model.parameters(), lr=calib_config['lr'], weight_decay=calib_config['weight_decay'], betas=calib_config['betas'])
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
                                                     max_lr = calib_config['lr'],

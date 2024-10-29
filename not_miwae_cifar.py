@@ -20,7 +20,6 @@ class ZeroBlueTransform:
 
     def __call__(self, img):
         # Normalize to [0, 1] (assuming img is in range [0, 255])
-        img = img.float() / 255.0
 
         # Create a mask for pixels where blue is the dominant color channel
         blue_dominant_mask = (img[2, :, :] > img[0, :, :]) & (img[2, :, :] > img[1, :, :])

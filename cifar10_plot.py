@@ -68,7 +68,7 @@ def plot_images_with_imputation(model_path, calib_config):
     data = next(iter(dataloader))
     img_zero_batch, img_mask_batch, original_batch = data[0]
     with torch.no_grad():
-        mu, lpxz, lpmz, lqzx, lpz = model(img_zero_batch, img_mask_batch, 10)
+        mu, lpxz, lpmz, lqzx, lpz = model(img_zero_batch.flatten(), img_mask_batch.flatten(), 10)
         mu = torch.exp(mu)
         # Compute the importance weights
         wl = softmax(lpxz + lpmz + lpz - lqzx)

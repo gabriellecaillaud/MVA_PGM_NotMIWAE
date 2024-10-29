@@ -15,13 +15,13 @@
 ##SBATCH --gres=gpu:1g.10gb:1
 ##SBATCH --cpus-per-task=4
 
-#SBATCH --partition=prod20
-#SBATCH --gres=gpu:2g.20gb:1
-#SBATCH --cpus-per-task=4
-
-##SBATCH --partition=prod40
-##SBATCH --gres=gpu:3g.40gb:1
+##SBATCH --partition=prod20
+##SBATCH --gres=gpu:2g.20gb:1
 ##SBATCH --cpus-per-task=4
+
+#SBATCH --partition=prod40
+#SBATCH --gres=gpu:3g.40gb:1
+#SBATCH --cpus-per-task=4
 
 ##SBATCH --partition=prod80
 ##SBATCH --gres=gpu:A100.80gb:1
@@ -60,4 +60,4 @@ initial_date=$(date +"%Y%m%d_%H%M%S")
 log_dir="logs/run_$initial_date"
 mkdir -p "$log_dir"
 
-python main.py > $log_dir/log.logs 2>&1
+python not_miwae_cifar.py > $log_dir/log.logs 2>&1

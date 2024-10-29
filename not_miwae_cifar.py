@@ -132,12 +132,11 @@ def plot_images():
 
 if __name__ == "__main__":
     calib_config = [
-        {'model': 'not_miwae', 'lr': 5e-4, 'epochs': 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 4,
-         'n_hidden': 128, 'n_latent': 100, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
-         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 10},
+        {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 32,
+         'n_hidden': 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
+         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 20},
         ][-1]
 
-    plot_images()
     # Adjust threshold as needed
     transform = transforms.Compose([
         transforms.ToTensor(),  # Converts PIL image to tensor
@@ -176,6 +175,7 @@ if __name__ == "__main__":
     seed_everything(calib_config['random_seed'])
 
     device = "cuda" if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
     model = notMIWAE(n_input_features=3*32*32, n_hidden=calib_config['n_hidden'],
                      n_latent=calib_config['n_latent'], missing_process=calib_config['missing_process'],
                      out_dist=calib_config['out_dist'])

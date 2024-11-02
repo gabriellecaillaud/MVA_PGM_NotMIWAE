@@ -211,6 +211,8 @@ class BernoulliDecoderConvMiss(nn.Module):
             logits = None
 
         return logits  # Output shape: (N, 3, 32, 32)
+
+
 class ConvNotMIWAE(nn.Module):
     def __init__(
             self,
@@ -317,6 +319,120 @@ class ConvNotMIWAE(nn.Module):
 
         return mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z
 
+
+class ConvNotMIWAEWithReparametrizationTrick(nn.Module):
+    def __init__(
+            self,
+            n_latent=128,
+            activation=nn.ReLU(),
+            out_activation=nn.Sigmoid(),
+            hidden_dims=[64, 128, 256],
+            missing_process='selfmasking',
+            testing=False
+    ):
+        super(ConvNotMIWAEWithReparametrizationTrick, self).__init__()
+        print("Conv not MIWAE with reparametrization trick (no .sample from a torch.dist)")
+        # Model settings
+        self.n_latent = n_latent
+        self.activation = activation
+        self.out_activation = out_activation
+        self.testing = testing
+        self.missing_process = missing_process
+        self.eps = torch.finfo(torch.float32).eps
+
+        # Encoder
+        self.encoder = ConvVAEncoder(
+            in_channels=3,
+            hidden_dims=hidden_dims,
+            n_latent=n_latent,
+            activation=activation
+        )
+
+        # Decoder
+        self.decoder = ConvGaussDecoder(
+            n_latent=n_latent,
+            hidden_dims=hidden_dims[::-1],  # Reverse encoder dims
+            out_channels=3,
+            activation=activation,
+            out_activation=out_activation
+        )
+
+        # Missing process decoder
+        self.missing_decoder = BernoulliDecoderConvMiss(
+            n_hidden=64, missing_process=self.missing_process
+        )
+
+    def forward(self, x, s, n_samples_importance_sampling):
+        # x shape: [batch_size, 3, 32, 32]
+        # s shape: [batch_size, 3, 32, 32] (binary mask)
+
+        # Encoder
+        q_mu, q_log_var = self.encoder(x)
+
+        # Reparameterization trick
+        epsilon = torch.randn(n_samples_importance_sampling, *q_mu.shape, device=q_mu.device)
+        # Calculate standard deviation from log variance
+        std = torch.exp(0.5 * q_log_var)
+        # Apply reparameterization trick: z = mu + std * epsilon
+        z = q_mu.unsqueeze(0) + std.unsqueeze(0) * epsilon
+        z = z.permute(1, 0, 2)  # [batch_size, n_samples, n_latent]
+
+        # Decoder
+        mu, std = self.decoder(z.reshape(-1, self.n_latent))
+
+        # Reshape outputs to include samples dimension
+        batch_size = x.shape[0]
+        mu = mu.reshape(batch_size, n_samples_importance_sampling, *x.shape[1:])
+        std = std.reshape(batch_size, n_samples_importance_sampling, *x.shape[1:])
+
+        epsilon = torch.randn_like(mu)
+
+        # Apply reparametrization trick
+        samples = mu + std * epsilon
+
+        # Compute log probabilities
+        x_expanded = x.unsqueeze(1)
+        s_expanded = s.unsqueeze(1)
+
+        log_2pi = torch.tensor(2 * torch.pi, device=z.device)
+        # Compute log probabilities manually for Normal distribution
+        log_p_x_given_z = torch.sum(
+            s_expanded * (-0.5 * torch.log(log_2pi) - torch.log(std) - 0.5 * ((x_expanded - mu) / std) ** 2),
+            dim=[-1, -2, -3]  # Sum over channels, height, width
+        )
+
+        # Mix observed and sampled values using the reparametrized samples
+        l_out_mixed = samples * (1 - s_expanded) + x_expanded * s_expanded
+
+        # Compute missing probabilities
+        logits_miss = self.missing_decoder(l_out_mixed.reshape(-1, *x.shape[1:]))
+        logits_miss = logits_miss.reshape(batch_size, n_samples_importance_sampling, *x.shape[1:])
+
+        # p(s|x)
+        # Bernouilli distribution reparametrization trick
+        log_p_s_given_x = torch.sum(
+            -logits_miss * (1 - s_expanded) - torch.log(1 + torch.exp(-logits_miss)),
+            dim=[-1, -2, -3]  # Sum over channels, height, width
+        )
+
+        std_q = torch.sqrt(torch.exp(q_log_var.unsqueeze(1)))
+        log_q_z_given_x = torch.sum(
+            -0.5 * torch.log(log_2pi)
+            - torch.log(std_q)
+            - 0.5 * ((z - q_mu.unsqueeze(1)) / std_q) ** 2,
+            dim=-1
+        )
+
+        # Evaluate the z-samples in the prior (standard normal: μ=0, σ=1)
+        log_p_z = torch.sum(
+            -0.5 * torch.log(log_2pi)
+            - 0.5 * (z ** 2),  # simplified since μ=0, σ=1
+            dim=-1
+        )
+
+        return mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z
+
+
 def train_conv_notMIWAE_on_cifar10(model, train_loader, val_loader, optimizer, scheduler, num_epochs,
                               total_samples_x_train, device, date):
     model.to(device)
@@ -419,7 +535,7 @@ if __name__ == "__main__":
 
     device = "cuda" if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
-    model = ConvNotMIWAE(n_latent=calib_config['n_latent'],
+    model = ConvNotMIWAEWithReparametrizationTrick(n_latent=calib_config['n_latent'],
             activation=nn.ReLU(),
             out_activation=nn.Sigmoid(),
             hidden_dims= calib_config['hidden_dims'],

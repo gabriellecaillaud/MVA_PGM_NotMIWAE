@@ -97,9 +97,9 @@ def train_notMIWAE_on_cifar10(model, train_loader, val_loader, optimizer, schedu
 
 if __name__ == "__main__":
     calib_config = [
-        {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 32,
+        {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 16,
          'n_hidden': 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
-         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 20},
+         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 60},
         ][-1]
 
     # Adjust threshold as needed

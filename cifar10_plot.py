@@ -118,11 +118,8 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
         axes[i, 0].axis("off")
 
         # Transformed image with blue pixels zeroed out
-        axes[i, 1].imshow(img_zero_batch[i].permute(1, 2, 0).numpy())
-        if calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
-            axes[i, 1].set_title("Pixels RGB where most blue removed")
-        elif calib_config['transform'] == 'ZeroBlueTransform':
-            axes[i, 1].set_title("Only blue pixels where most blue removed")
+        axes[i, 1].imshow(img_zero_batch[i].permute(1, 2, 0).numpy())  
+        axes[i, 1].set_title("With missing data", wrap=True)
         axes[i, 1].axis("off")
 
         # Mask showing unchanged and modified pixels
@@ -134,6 +131,11 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
         axes[i, 3].imshow(X_imputed[i].permute(1, 2, 0).numpy())
         axes[i, 3].set_title("After imputation")
         axes[i, 3].axis("off")
+    
+    if calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
+        plt.suptitle("Pixels RGB where most blue removed", wrap=True)
+    elif calib_config['transform'] == 'ZeroBlueTransform':
+        plt.suptitle("Only blue pixels where most blue removed", wrap=True)
 
     plt.tight_layout()
     plt.savefig(f"temp/plot_{Path(model_path).stem}_res_{date}.png")

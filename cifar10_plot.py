@@ -61,19 +61,19 @@ def plot_images_with_imputation(model_path, calib_config):
     if calib_config['transform'] == 'ZeroBlueTransform':
         transform = transforms.Compose([
             transforms.ToTensor(),  # Converts PIL image to tensor
-            ZeroBlueTransform()
+            ZeroBlueTransform(do_flatten=False)
         ])
     elif calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
         transform = transforms.Compose([
             transforms.ToTensor(),  # Converts PIL image to tensor
-            ZeroPixelWhereBlueTransform()
+            ZeroPixelWhereBlueTransform(do_flatten=False)
         ])
     else:
         raise KeyError('Transforms is not correctly defined.')
-    train_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=True,
+    val_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=False,
                                                     download=False, transform=transform),
                        torch.arange(4))
-    dataloader = torch.utils.data.DataLoader(train_set, batch_size=4,
+    dataloader = torch.utils.data.DataLoader(val_set, batch_size=4,
                                                shuffle=True, num_workers=2)
 
     model = notMIWAE(n_input_features=3*32*32, n_hidden=calib_config['n_hidden'],
@@ -103,7 +103,10 @@ def plot_images_with_imputation(model_path, calib_config):
 
         # Transformed image with blue pixels zeroed out
         axes[i, 1].imshow(img_zero_batch[i].permute(1, 2, 0).numpy())
-        axes[i, 1].set_title("Zero Blue Pixels")
+        if calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
+            axes[i, 1].set_title("Pixels RGB where most blue removed")
+        elif calib_config['transform'] == 'ZeroBlueTransform':
+            axes[i, 1].set_title("Only blue pixels where most blue removed")
         axes[i, 1].axis("off")
 
         # Mask showing unchanged and modified pixels
@@ -120,7 +123,7 @@ def plot_images_with_imputation(model_path, calib_config):
     plt.savefig(f"temp/plot_{Path(model_path).stem}_res_{date}.png")
 
 if __name__=="__main__":
-    plot_images(transform_name='ZeroBlueTransform')
-    # model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_10_29_18_20_00_best_val_loss.pt"
-    # calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'linear', 'out_dist': 'gauss'}
-    # plot_images_with_imputation(model_path, calib_config)
+    # plot_images(transform_name='ZeroBlueTransform')
+    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_02_13_36_03_best_val_loss.pt"
+    calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'linear', 'out_dist': 'gauss', 'transform': 'ZeroBlueTransform'}
+    plot_images_with_imputation(model_path, calib_config)

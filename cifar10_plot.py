@@ -7,16 +7,24 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from data_imputation import compute_imputation_rmse_not_miwae, softmax
 from not_miwae import get_notMIWAE, notMIWAE
-from not_miwae_cifar import ZeroBlueTransform
+from not_miwae_cifar import ZeroBlueTransform, ZeroPixelWhereBlueTransform
 from utils import seed_everything
 
 
 
-def plot_images():
-    transform = transforms.Compose([
-        transforms.ToTensor(),  # Converts PIL image to tensor
-        ZeroBlueTransform(do_flatten=False)
-    ])
+def plot_images(transform_name):
+    if transform_name == 'ZeroBlueTransform':
+        transform = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL image to tensor
+            ZeroBlueTransform(do_flatten=False)
+        ])
+    elif transform_name == 'ZeroPixelWhereBlueTransform':
+        transform = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL image to tensor
+            ZeroPixelWhereBlueTransform(do_flatten=False)
+        ])
+    else:
+        raise KeyError('Transforms is not correctly defined.')
     train_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=True,
                                                     download=False, transform=transform),
                        torch.arange(10))
@@ -50,10 +58,18 @@ def plot_images():
 def plot_images_with_imputation(model_path, calib_config):
 
     date = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    transform = transforms.Compose([
-        transforms.ToTensor(),  # Converts PIL image to tensor
-        ZeroBlueTransform(do_flatten=False)
-    ])
+    if calib_config['transform'] == 'ZeroBlueTransform':
+        transform = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL image to tensor
+            ZeroBlueTransform()
+        ])
+    elif calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
+        transform = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL image to tensor
+            ZeroPixelWhereBlueTransform()
+        ])
+    else:
+        raise KeyError('Transforms is not correctly defined.')
     train_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=True,
                                                     download=False, transform=transform),
                        torch.arange(4))
@@ -104,6 +120,7 @@ def plot_images_with_imputation(model_path, calib_config):
     plt.savefig(f"temp/plot_{Path(model_path).stem}_res_{date}.png")
 
 if __name__=="__main__":
-    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_10_29_18_20_00_best_val_loss.pt"
-    calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'linear', 'out_dist': 'gauss'}
-    plot_images_with_imputation(model_path, calib_config)
+    plot_images(transform_name='ZeroBlueTransform')
+    # model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_10_29_18_20_00_best_val_loss.pt"
+    # calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'linear', 'out_dist': 'gauss'}
+    # plot_images_with_imputation(model_path, calib_config)

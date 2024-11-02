@@ -16,6 +16,7 @@ from utils import seed_everything
 
 class ZeroBlueTransform:
     def __init__(self, do_flatten = True):
+        print("Missing data type: blue channel put to zero when blue is the most intense color")
         self.do_flatten = do_flatten
 
     def __call__(self, img):
@@ -26,11 +27,11 @@ class ZeroBlueTransform:
 
         # Zero out pixels where blue is not dominant
         img_zero = img.clone()
-        img_zero[2,~blue_dominant_mask] = 0
+        img_zero[2,blue_dominant_mask] = 0
 
         # Create img_mask (1 if unchanged, 0 if modified)
         img_mask = torch.ones_like(img)
-        img_mask[2, ~blue_dominant_mask] = 0
+        img_mask[2, blue_dominant_mask] = 0
 
         if self.do_flatten:
             # Flatten tensors if needed (CIFAR-10 may not require flattening)
@@ -38,6 +39,31 @@ class ZeroBlueTransform:
         else:
             return img_zero, img_mask, img
 
+
+class ZeroPixelWhereBlueTransform:
+    def __init__(self, do_flatten = True):
+        print("Type of missing data: all channels put to zero when blue is the most intense color")
+        self.do_flatten = do_flatten
+
+    def __call__(self, img):
+        # Normalize to [0, 1] (assuming img is in range [0, 255])
+
+        # Create a mask for pixels where blue is the dominant color channel
+        blue_dominant_mask = (img[2, :, :] > img[0, :, :]) & (img[2, :, :] > img[1, :, :])
+
+        # Zero out pixels where blue is not dominant
+        img_zero = img.clone()
+        img_zero[:,blue_dominant_mask] = 0
+
+        # Create img_mask (1 if unchanged, 0 if modified)
+        img_mask = torch.ones_like(img)
+        img_mask[:, blue_dominant_mask] = 0
+
+        if self.do_flatten:
+            # Flatten tensors if needed (CIFAR-10 may not require flattening)
+            return img_zero.flatten(), img_mask.flatten(), img.flatten()
+        else:
+            return img_zero, img_mask, img
 
 def imshow(img):
     img = img / 2 + 0.5  # unnormalize
@@ -99,15 +125,22 @@ if __name__ == "__main__":
     calib_config = [
         {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 16,
          'n_hidden': 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
-         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 60},
+         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 60, 'transform': 'ZeroBlueTransform'},
         ][-1]
 
-    # Adjust threshold as needed
-    transform = transforms.Compose([
-        transforms.ToTensor(),  # Converts PIL image to tensor
-        ZeroBlueTransform()
-    ])
 
+    if calib_config['transform'] == 'ZeroBlueTransform':
+        transform = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL image to tensor
+            ZeroBlueTransform()
+        ])
+    elif calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
+        transform = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL image to tensor
+            ZeroPixelWhereBlueTransform()
+        ])
+    else:
+        raise KeyError('Transforms is not correctly defined.')
     batch_size = calib_config['batch_size']
 
     if calib_config['dataset_size'] is not None:

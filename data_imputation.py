@@ -94,6 +94,16 @@ def compute_imputation_rmse_not_miwae(mu, log_p_x_given_z, log_p_s_given_x, log_
         rmse = torch.sqrt(torch.sum((Xtrue - Xm) ** 2 * (1 - S)) / torch.sum(1 - S))
     return rmse
 
+def compute_imputation_rmse_conv_not_miwae(mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z, Xtrue, S):
+    with torch.no_grad():
+        # Compute the importance weights
+        wl = softmax(log_p_x_given_z + log_p_s_given_x + log_p_z - log_q_z_given_x)
+        wl = wl.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        # Compute the missing data imputation
+        Xm = torch.sum(mu * wl, dim=1)
+        assert Xm.shape == Xtrue.shape
+        rmse = torch.sqrt(torch.sum((Xtrue - Xm) ** 2 * (1 - S)) / torch.sum(1 - S))
+    return rmse
 
 def compute_imputation_rmse_miwae(mu, log_p_x_given_z, log_q_z_given_x, log_p_z, Xtrue, S):
     with torch.no_grad():

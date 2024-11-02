@@ -1,5 +1,6 @@
 import datetime
 
+import numpy as np
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
@@ -8,7 +9,9 @@ import torchvision
 from torch.utils.data import Subset
 from torchvision import transforms
 
-from not_miwae_cifar import ZeroBlueTransform, ZeroPixelWhereBlueTransform, train_notMIWAE_on_cifar10
+from data_imputation import compute_imputation_rmse_conv_not_miwae
+from not_miwae import get_notMIWAE
+from not_miwae_cifar import ZeroBlueTransform, ZeroPixelWhereBlueTransform
 from utils import seed_everything
 
 
@@ -314,12 +317,63 @@ class ConvNotMIWAE(nn.Module):
 
         return mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z
 
+def train_conv_notMIWAE_on_cifar10(model, train_loader, val_loader, optimizer, scheduler, num_epochs,
+                              total_samples_x_train, device, date):
+    model.to(device)
+    best_val_loss = np.inf
+    for epoch in range(num_epochs):
+        model.train()
+        train_loss = 0
+        train_rmse = 0
+        for batch_idx, data in enumerate(train_loader):
+            model.train()
+            x, s, xtrue = data[0]
+            x, s, xtrue = x.to(device), s.to(device), xtrue.to(device)
+            optimizer.zero_grad()
+            mu, lpxz, lpmz, lqzx, lpz = model(x, s, total_samples_x_train)
+            loss = -get_notMIWAE(total_samples_x_train, lpxz, lpmz, lqzx, lpz)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            train_loss += loss.item()
+
+            model.eval()
+            # compute rmse on batch
+            with torch.no_grad():
+                batch_rmse = compute_imputation_rmse_conv_not_miwae(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
+                train_rmse += batch_rmse
+
+        train_loss /= len(train_loader)
+        train_rmse /= len(train_loader)
+
+        model.eval()
+        val_loss = 0
+        val_rmse = 0
+        with torch.no_grad():
+            for data in val_loader:
+                x, s, xtrue = data[0]
+                x, s, xtrue = x.to(device), s.to(device), xtrue.to(device)
+                mu, lpxz, lpmz, lqzx, lpz = model(x, s, total_samples_x_train)
+                loss = -get_notMIWAE(total_samples_x_train, lpxz, lpmz, lqzx, lpz)
+                val_loss += loss.item()
+                batch_rmse = compute_imputation_rmse_conv_not_miwae(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
+                val_rmse += batch_rmse
+        val_loss /= len(val_loader)
+        val_rmse /= len(val_loader)
+
+        if val_loss < best_val_loss:
+            torch.save(model.state_dict(), f"temp/not_miwae_{date}_best_val_loss.pt")
+
+        print(
+            f'Epoch {(epoch + 1):4.0f}, Train Loss: {train_loss:8.4f} , Train rmse: {train_rmse:7.4f} , Val Loss: {val_loss:8.4f} , Val RMSE: {val_rmse:7.4f}  last value of lr: {scheduler.get_last_lr()[-1]:.4f}')
+
+
 
 if __name__ == "__main__":
     calib_config = [
         {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 16,
          'n_hidden': 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
-         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 60, 'transform': 'ZeroBlueTransform', 'hidden_dims' : [62,128,256]},
+         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : 60, 'transform': 'ZeroBlueTransform', 'hidden_dims' : [64,128,256]},
         ][-1]
 
 
@@ -382,7 +436,7 @@ if __name__ == "__main__":
                                                     # final_div_factor=calib_config['final_div_factor']
                                                     )
     print(f"calib_config:{calib_config}")
-    train_notMIWAE_on_cifar10(model=model, train_loader=train_loader, val_loader=test_loader, optimizer=optimizer, scheduler=scheduler, num_epochs = calib_config['epochs'], total_samples_x_train= 10, device=device, date=date )
+    train_conv_notMIWAE_on_cifar10(model=model, train_loader=train_loader, val_loader=test_loader, optimizer=optimizer, scheduler=scheduler, num_epochs = calib_config['epochs'], total_samples_x_train= 10, device=device, date=date )
 
 
 

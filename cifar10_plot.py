@@ -3,8 +3,10 @@ from torch.utils.data import Subset
 import torch
 import torchvision
 import torchvision.transforms as transforms
+from convolutional_not_miwae import ConvNotMIWAE
 import matplotlib.pyplot as plt
 from pathlib import Path
+import torch.nn as nn
 from data_imputation import compute_imputation_rmse_not_miwae, softmax
 from not_miwae import get_notMIWAE, notMIWAE
 from not_miwae_cifar import ZeroBlueTransform, ZeroPixelWhereBlueTransform
@@ -55,7 +57,7 @@ def plot_images(transform_name):
     plt.tight_layout()
     plt.show()
 
-def plot_images_with_imputation(model_path, calib_config):
+def plot_images_with_imputation(model_path, is_conv_model, calib_config):
 
     date = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     if calib_config['transform'] == 'ZeroBlueTransform':
@@ -75,22 +77,36 @@ def plot_images_with_imputation(model_path, calib_config):
                        torch.arange(4))
     dataloader = torch.utils.data.DataLoader(val_set, batch_size=4,
                                                shuffle=True, num_workers=2)
-
-    model = notMIWAE(n_input_features=3*32*32, n_hidden=calib_config['n_hidden'],
-                     n_latent=calib_config['n_latent'], missing_process=calib_config['missing_process'],
-                     out_dist=calib_config['out_dist'])
+    if is_conv_model:
+            model = ConvNotMIWAE(n_latent=calib_config['n_latent'],
+            activation=nn.ReLU(),
+            out_activation=nn.Sigmoid(),
+            hidden_dims= calib_config['hidden_dims'],
+            missing_process=calib_config['missing_process'])
+    else:
+        model = notMIWAE(n_input_features=3*32*32, n_hidden=calib_config['n_hidden'],
+                        n_latent=calib_config['n_latent'], missing_process=calib_config['missing_process'],
+                        out_dist=calib_config['out_dist'])
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
     data = next(iter(dataloader))
     img_zero_batch, img_mask_batch, original_batch = data[0]
     with torch.no_grad():
-        mu, lpxz, lpmz, lqzx, lpz = model(img_zero_batch.flatten(start_dim=1), img_mask_batch.flatten(start_dim=1), 10)
-        mu = torch.exp(mu)
-        # Compute the importance weights
-        wl = softmax(lpxz + lpmz + lpz - lqzx)
-        # Compute the missing data imputation
-        Xm = torch.sum((mu.T * wl.T).T, dim=0)
-        X_imputed = img_zero_batch + Xm.reshape((4,3,32,32)) * (1 - img_mask_batch)
+        if is_conv_model: 
+            mu, lpxz, lpmz, lqzx, lpz = model(img_zero_batch, img_mask_batch, 10)
+            wl = softmax(lpxz + lpmz + lpz - lqzx)
+            wl = wl.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+            # Compute the missing data imputation
+            Xm = torch.sum(mu * wl, dim=1)
+            X_imputed = img_zero_batch + Xm * (1 - img_mask_batch)
+        else:
+            mu, lpxz, lpmz, lqzx, lpz = model(img_zero_batch.flatten(start_dim=1), img_mask_batch.flatten(start_dim=1), 10)
+            mu = torch.exp(mu)
+            # Compute the importance weights
+            wl = softmax(lpxz + lpmz + lpz - lqzx)
+            # Compute the missing data imputation
+            Xm = torch.sum((mu.T * wl.T).T, dim=0)
+            X_imputed = img_zero_batch + Xm.reshape((4,3,32,32)) * (1 - img_mask_batch)
 
     # Plot the images
     fig, axes = plt.subplots(4, 4, figsize=(10, 12))
@@ -124,6 +140,6 @@ def plot_images_with_imputation(model_path, calib_config):
 
 if __name__=="__main__":
     # plot_images(transform_name='ZeroBlueTransform')
-    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_02_13_36_03_best_val_loss.pt"
-    calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'linear', 'out_dist': 'gauss', 'transform': 'ZeroBlueTransform'}
-    plot_images_with_imputation(model_path, calib_config)
+    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_02_16_26_30_best_val_loss.pt"
+    calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'out_dist': 'gauss', 'transform': 'ZeroBlueTransform', 'hidden_dims' : [64,128,256]}
+    plot_images_with_imputation(model_path, is_conv_model = True, calib_config=calib_config)

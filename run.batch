@@ -60,4 +60,4 @@ initial_date=$(date +"%Y%m%d_%H%M%S")
 log_dir="logs/run_$initial_date"
 mkdir -p "$log_dir"
 
-python not_miwae_cifar.py > $log_dir/log.logs 2>&1
+python cifar10_plot.py > $log_dir/log.logs 2>&1

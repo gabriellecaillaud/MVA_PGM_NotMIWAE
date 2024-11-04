@@ -3,7 +3,7 @@ from torch.utils.data import Subset
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from convolutional_not_miwae import ConvNotMIWAE
+from convolutional_not_miwae import ConvNotMIWAE, ConvNotMIWAEWithReparametrizationTrick
 import matplotlib.pyplot as plt
 from pathlib import Path
 import torch.nn as nn
@@ -78,7 +78,7 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
     dataloader = torch.utils.data.DataLoader(val_set, batch_size=4,
                                                shuffle=True, num_workers=2)
     if is_conv_model:
-            model = ConvNotMIWAE(n_latent=calib_config['n_latent'],
+            model = ConvNotMIWAEWithReparametrizationTrick(n_latent=calib_config['n_latent'],
             activation=nn.ReLU(),
             out_activation=nn.Sigmoid(),
             hidden_dims= calib_config['hidden_dims'],
@@ -142,6 +142,6 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
 
 if __name__=="__main__":
     # plot_images(transform_name='ZeroBlueTransform')
-    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_02_16_26_30_best_val_loss.pt"
+    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_02_18_57_03_best_val_loss.pt"
     calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'out_dist': 'gauss', 'transform': 'ZeroBlueTransform', 'hidden_dims' : [64,128,256]}
     plot_images_with_imputation(model_path, is_conv_model = True, calib_config=calib_config)

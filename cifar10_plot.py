@@ -3,7 +3,7 @@ from torch.utils.data import Subset
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from convolutional_not_miwae import ConvNotMIWAE
+from convolutional_not_miwae import ConvNotMIWAE, ConvNotMIWAEWithReparametrizationTrick
 import matplotlib.pyplot as plt
 from pathlib import Path
 import torch.nn as nn
@@ -78,7 +78,7 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
     dataloader = torch.utils.data.DataLoader(val_set, batch_size=4,
                                                shuffle=True, num_workers=2)
     if is_conv_model:
-            model = ConvNotMIWAE(n_latent=calib_config['n_latent'],
+            model = ConvNotMIWAEWithReparametrizationTrick(n_latent=calib_config['n_latent'],
             activation=nn.ReLU(),
             out_activation=nn.Sigmoid(),
             hidden_dims= calib_config['hidden_dims'],
@@ -118,11 +118,8 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
         axes[i, 0].axis("off")
 
         # Transformed image with blue pixels zeroed out
-        axes[i, 1].imshow(img_zero_batch[i].permute(1, 2, 0).numpy())
-        if calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
-            axes[i, 1].set_title("Pixels RGB where most blue removed")
-        elif calib_config['transform'] == 'ZeroBlueTransform':
-            axes[i, 1].set_title("Only blue pixels where most blue removed")
+        axes[i, 1].imshow(img_zero_batch[i].permute(1, 2, 0).numpy())  
+        axes[i, 1].set_title("With missing data", wrap=True)
         axes[i, 1].axis("off")
 
         # Mask showing unchanged and modified pixels
@@ -134,12 +131,17 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
         axes[i, 3].imshow(X_imputed[i].permute(1, 2, 0).numpy())
         axes[i, 3].set_title("After imputation")
         axes[i, 3].axis("off")
+    
+    if calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
+        plt.suptitle("Pixels RGB where most blue removed", wrap=True)
+    elif calib_config['transform'] == 'ZeroBlueTransform':
+        plt.suptitle("Only blue pixels where most blue removed", wrap=True)
 
     plt.tight_layout()
     plt.savefig(f"temp/plot_{Path(model_path).stem}_res_{date}.png")
 
 if __name__=="__main__":
     # plot_images(transform_name='ZeroBlueTransform')
-    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_02_16_26_30_best_val_loss.pt"
+    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_02_18_57_03_best_val_loss.pt"
     calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'out_dist': 'gauss', 'transform': 'ZeroBlueTransform', 'hidden_dims' : [64,128,256]}
     plot_images_with_imputation(model_path, is_conv_model = True, calib_config=calib_config)

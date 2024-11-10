@@ -487,8 +487,8 @@ def train_conv_notMIWAE_on_cifar10(model, train_loader, val_loader, optimizer, s
 
 if __name__ == "__main__":
     calib_config = [
-        {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 16,
-         'n_hidden': 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
+        {'model': 'not_miwae', 'lr': 3e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 64,
+         'n_hidden': 512, 'n_latent': 128, 'missing_process': 'nonlinear', 'weight_decay': 0, 'betas': (0.9, 0.999),
          'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : None, 'transform': 'ZeroBlueTransform', 'hidden_dims' : [64,128,256]},
         ][-1]
 
@@ -535,7 +535,7 @@ if __name__ == "__main__":
 
     device = "cuda" if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
-    model = ConvNotMIWAEWithReparametrizationTrick(n_latent=calib_config['n_latent'],
+    model = ConvNotMIWAE(n_latent=calib_config['n_latent'],
             activation=nn.ReLU(),
             out_activation=nn.Sigmoid(),
             hidden_dims= calib_config['hidden_dims'],

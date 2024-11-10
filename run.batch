@@ -19,16 +19,16 @@
 ##SBATCH --gres=gpu:2g.20gb:1
 ##SBATCH --cpus-per-task=4
 
-##SBATCH --partition=prod40
-##SBATCH --gres=gpu:3g.40gb:1
-##SBATCH --cpus-per-task=4
+#SBATCH --partition=prod40
+#SBATCH --gres=gpu:3g.40gb:1
+#SBATCH --cpus-per-task=4
 
-#SBATCH --partition=prod80
-#SBATCH --gres=gpu:A100.80gb:1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem-per-cpu=10G
-#SBATCH --nodes=1
+##SBATCH --partition=prod80
+##SBATCH --gres=gpu:A100.80gb:1
+##SBATCH --ntasks-per-node=1
+##SBATCH --cpus-per-task=8
+##SBATCH --mem-per-cpu=10G
+##SBATCH --nodes=1
 
 ## For ntasks and cpus: total requested cpus (ntasks * cpus-per-task) must be in [1: 4 * nMIG] with nMIG = nb_1g.10gb | 2 * nb_2g.20gb | 4 * nb_3g.40gb | 8 * nb_A100.80gb
 #SBATCH --ntasks=1
@@ -60,4 +60,4 @@ initial_date=$(date +"%Y%m%d_%H%M%S")
 log_dir="logs/run_$initial_date"
 mkdir -p "$log_dir"
 
-python cifar10_plot.py > $log_dir/log.logs 2>&1
+python convolutional_not_miwae.py > $log_dir/log.logs 2>&1

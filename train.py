@@ -118,6 +118,8 @@ if __name__ == "__main__":
                     {'model': 'not_miwae','dataset_name':  'cancer', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking_known', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 't'},
                     {'model': 'not_miwae', 'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'linear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
                     {'model': 'miwae', 'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
+                    {'model': 'not_miwae', 'dataset_name':  'cancer', 'lr': 1e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 16, 'n_hidden': 128, 'n_latent': 28, 'missing_process':'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
+
                     ][-1]
 
     seed_everything(calib_config['random_seed'])
@@ -132,7 +134,7 @@ if __name__ == "__main__":
 
     else:
         raise ValueError("Please provide a dataset name from ['cancer', 'white_wine']")
-
+    print(f"Number of features: {X_data.shape[1]}")
     # Split data into train and validation sets
     Xtrain, Xval = train_test_split(X_data, test_size=0.2, random_state=42, shuffle=True)
 

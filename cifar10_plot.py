@@ -3,13 +3,13 @@ from torch.utils.data import Subset
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from convolutional_not_miwae import ConvNotMIWAE, ConvNotMIWAEWithReparametrizationTrick
+from convolutional_not_miwae import ConvNotMIWAE
 import matplotlib.pyplot as plt
 from pathlib import Path
 import torch.nn as nn
 from data_imputation import compute_imputation_rmse_not_miwae, softmax
 from not_miwae import get_notMIWAE, notMIWAE
-from not_miwae_cifar import ZeroBlueTransform, ZeroPixelWhereBlueTransform
+from not_miwae_cifar import ZeroBlueTransform, ZeroRedTransform,  ZeroPixelWhereBlueTransform, ZeroGreenTransform
 from utils import seed_everything
 
 
@@ -57,13 +57,24 @@ def plot_images(transform_name):
     plt.tight_layout()
     plt.show()
 
-def plot_images_with_imputation(model_path, is_conv_model, calib_config):
+def plot_images_with_imputation(model_path, is_conv_model, calib_config, number_of_images=4):
 
     date = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     if calib_config['transform'] == 'ZeroBlueTransform':
         transform = transforms.Compose([
             transforms.ToTensor(),  # Converts PIL image to tensor
             ZeroBlueTransform(do_flatten=False)
+        ])
+         
+    elif calib_config['transform'] == 'ZeroRedTransform':
+        transform = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL image to tensor
+            ZeroRedTransform(do_flatten=False)
+        ])
+    elif calib_config['transform'] == 'ZeroGreenTransform':
+        transform = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL image to tensor
+            ZeroGreenTransform(do_flatten=False)
         ])
     elif calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
         transform = transforms.Compose([
@@ -74,11 +85,12 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
         raise KeyError('Transforms is not correctly defined.')
     val_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=False,
                                                     download=False, transform=transform),
-                       torch.arange(4))
-    dataloader = torch.utils.data.DataLoader(val_set, batch_size=4,
+                       torch.arange(number_of_images))
+    seed_everything(2)
+    dataloader = torch.utils.data.DataLoader(val_set, batch_size=number_of_images,
                                                shuffle=True, num_workers=2)
     if is_conv_model:
-            model = ConvNotMIWAEWithReparametrizationTrick(n_latent=calib_config['n_latent'],
+            model = ConvNotMIWAE(n_latent=calib_config['n_latent'],
             activation=nn.ReLU(),
             out_activation=nn.Sigmoid(),
             hidden_dims= calib_config['hidden_dims'],
@@ -106,12 +118,12 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
             wl = softmax(lpxz + lpmz + lpz - lqzx)
             # Compute the missing data imputation
             Xm = torch.sum((mu.T * wl.T).T, dim=0)
-            X_imputed = img_zero_batch + Xm.reshape((4,3,32,32)) * (1 - img_mask_batch)
+            X_imputed = img_zero_batch + Xm.reshape((number_of_images,3,32,32)) * (1 - img_mask_batch)
 
     # Plot the images
-    fig, axes = plt.subplots(4, 4, figsize=(10, 12))
+    fig, axes = plt.subplots(number_of_images, 4, figsize=(10, 12))
 
-    for i in range(4):
+    for i in range(number_of_images):
         # Original image
         axes[i, 0].imshow(original_batch[i].permute(1, 2, 0).numpy())
         axes[i, 0].set_title("Original")
@@ -134,14 +146,19 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config):
     
     if calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
         plt.suptitle("Pixels RGB where most blue removed", wrap=True)
+    elif calib_config['transform'] == 'ZeroRdTransform':
+        plt.suptitle("Only red pixels where most red removed", wrap=True)
     elif calib_config['transform'] == 'ZeroBlueTransform':
         plt.suptitle("Only blue pixels where most blue removed", wrap=True)
+    elif calib_config['transform'] == 'ZeroGreenTransform':
+        plt.suptitle("Only green pixels where most green removed", wrap=True)
 
     plt.tight_layout()
     plt.savefig(f"temp/plot_{Path(model_path).stem}_res_{date}.png")
 
 if __name__=="__main__":
     # plot_images(transform_name='ZeroBlueTransform')
-    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_02_18_57_03_best_val_loss.pt"
-    calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'out_dist': 'gauss', 'transform': 'ZeroBlueTransform', 'hidden_dims' : [64,128,256]}
-    plot_images_with_imputation(model_path, is_conv_model = True, calib_config=calib_config)
+    model_path = "/raid/home/detectionfeuxdeforet/caillaud_gab/mva_pgm/MVA_PGM_NotMIWAE/temp/not_miwae_2024_11_20_15_21_17_best_val_loss.pt"
+    calib_config = {'n_hidden' : 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'out_dist': 'gauss', 'transform': 'ZeroRedTransform', 'hidden_dims' : [64,128,256]}
+    plot_images_with_imputation(model_path, is_conv_model = True, calib_config=calib_config, number_of_images=10)
+    print("Image generated.")

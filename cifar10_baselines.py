@@ -60,16 +60,97 @@ def convert_cifar10_to_numpy(dataset, batch_size=8):
     print("Inside function torch to numpy")
     return images_missing, masks, images_true
 
+def mean_imputation_and_rmse(img_zero, img_mask, img_original):
+    """
+    Replace missing blue channel values with the mean of remaining blue values
+    and compute RMSE between imputed and original values.
+    
+    Args:
+        img_zero (torch.Tensor): Image tensor with zeroed-out blue values
+        img_mask (torch.Tensor): Mask indicating which values were zeroed (0) vs kept (1)
+        img_original (torch.Tensor): Original image tensor before modification
+        
+    Returns:
+        tuple: (imputed_img, rmse)
+            - imputed_img: Image tensor with imputed values
+            - rmse: Root Mean Square Error between original and imputed values
+    """
+    imputed_img = img_zero.detach().clone()
+    
+    # If the tensors are flattened, reshape them to [channels, height, width]
+    if len(img_zero.shape) == 1:
+        size = int(np.cbrt(len(img_zero) / 3))  # Calculate original image size
+        img_zero = img_zero.reshape(3, size, size)
+        img_mask = img_mask.reshape(3, size, size)
+        img_original = img_original.reshape(3, size, size)
+        imputed_img = imputed_img.reshape(3, size, size)
+    
+    # Get blue channel components
+    blue_channel = img_zero[2]
+    blue_mask = img_mask[2]
+    
+    # Calculate mean of non-zero blue values
+    valid_blue_values = blue_channel[blue_mask == 1]
+    if len(valid_blue_values) > 0:
+        blue_mean = valid_blue_values.mean()
+    else:
+        blue_mean = 0.0  # Fallback if all blue values were zeroed
+    
+    # Replace zeroed values with the mean
+    blue_channel[blue_mask == 0] = blue_mean
+    
+    # Put the imputed blue channel back
+    imputed_img[2] = blue_channel
+    
+    # Calculate RMSE only for the modified blue values
+    modified_positions = (img_mask[2] == 0)
+    if modified_positions.sum() > 0:
+        squared_errors = (imputed_img[2][modified_positions] - 
+                         img_original[2][modified_positions]) ** 2
+        rmse = torch.sqrt(squared_errors.mean())
+    else:
+        rmse = torch.tensor(0.0)
+    
+    # Reshape back to original format if needed
+    if len(img_zero.shape) == 1:
+        imputed_img = imputed_img.flatten()
+    
+    return imputed_img, rmse
 
+# Example usage with a dataloader
+def evaluate_mean_imputation(dataloader):
+    """
+    Evaluate the mean imputation method over a dataset.
+    
+    Args:
+        dataloader: PyTorch DataLoader containing the dataset
+        
+    Returns:
+        float: Average RMSE across the dataset
+    """
+    total_rmse = 0.0
+    num_samples = 0
+    
+    for batch in dataloader:
+        # Assuming the dataloader returns tuples of (img_zero, img_mask, img_original)
+        img_zero, img_mask, img_original = batch[0]
+        _, rmse = mean_imputation_and_rmse(
+                img_zero, img_mask, img_original
+                )
+        total_rmse += rmse.item()
+        num_samples += 1
+    
+    avg_rmse = total_rmse / num_samples
+    return avg_rmse
 
 if __name__ == "__main__":
 
-    calib_config = [{'transform': 'ZeroBlueTransform', 'dataset_size': 256}
+    calib_config = [{'transform': 'ZeroBlueTransform', 'dataset_size': None}
                     ][-1]
     if calib_config['transform'] == 'ZeroBlueTransform':
         transform = transforms.Compose([
             transforms.ToTensor(),  # Converts PIL image to tensor
-            ZeroBlueTransform(do_flatten=True)
+            ZeroBlueTransform(do_flatten=False)
         ])
     else:
         raise KeyError('Transforms is not correctly defined.')
@@ -90,36 +171,39 @@ if __name__ == "__main__":
         test_set = torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=False,
                                                 download=False, transform=transform)
 
-    # processed_images_reshaped = self.processed_images.reshape(n_samples, -1).numpy()
-    all_images_missing, all_masks, all_images_true = convert_cifar10_to_numpy(train_set)
-    # Initialize and fit IterativeImputer
-    print("Before definition of IterativeImputer")
-    imputer = IterativeImputer(random_state=42, max_iter=10)
-    print("Before fitting the imputer")
-    images_imputed = imputer.fit_transform(all_images_missing)
 
-    RMSE_iter = np.sqrt(np.sum( all_images_true- images_imputed) ** 2 * (1 - all_masks)) / np.sum(1 - all_masks)
+    avg_rmse  =evaluate_mean_imputation(test_set)
+    print(f"Baseline on test set: Average RMSE when replacing missing values with the mean : {avg_rmse}")
+    # processed_images_reshaped = self.processed_images.reshape(n_samples, -1).numpy() 
+    # all_images_missing, all_masks, all_images_true = convert_cifar10_to_numpy(train_set)
+    # # Initialize and fit IterativeImputer
+    # print("Before definition of IterativeImputer")
+    # imputer = IterativeImputer(random_state=42, max_iter=10)
+    # print("Before fitting the imputer")
+    # images_imputed = imputer.fit_transform(all_images_missing)
 
-    print("MICE, imputation RMSE on train ", RMSE_iter)
+    # RMSE_iter = np.sqrt(np.sum( all_images_true- images_imputed) ** 2 * (1 - all_masks)) / np.sum(1 - all_masks)
 
-    all_images_missing_val, all_masks_val, all_images_true_val = convert_cifar10_to_numpy(test_set)
-    # Initialize and fit IterativeImputer
-    images_imputed_val = imputer.transform(all_images_missing_val)
+    # print("MICE, imputation RMSE on train ", RMSE_iter)
 
-    RMSE_iter_val = np.sqrt(np.sum(all_images_true_val - images_imputed_val) ** 2 * (1 - all_masks_val)) / np.sum(1 - all_masks_val)
-    print("MICE, imputation RMSE on val implementation 1", RMSE_iter_val)
+    # all_images_missing_val, all_masks_val, all_images_true_val = convert_cifar10_to_numpy(test_set)
+    # # Initialize and fit IterativeImputer
+    # images_imputed_val = imputer.transform(all_images_missing_val)
 
-    RMSE_iter_val = np.sqrt(np.sum((all_images_true_val - images_imputed_val)**2 * (1 - all_masks_val))) / np.sum(1 - all_masks_val)
-    print("MICE, imputation RMSE on val implementation Claude", RMSE_iter_val)
+    # RMSE_iter_val = np.sqrt(np.sum(all_images_true_val - images_imputed_val) ** 2 * (1 - all_masks_val)) / np.sum(1 - all_masks_val)
+    # print("MICE, imputation RMSE on val implementation 1", RMSE_iter_val)
 
-    estimator = RandomForestRegressor(n_estimators=100)
-    imp_rf = IterativeImputer(estimator=estimator)
+    # RMSE_iter_val = np.sqrt(np.sum((all_images_true_val - images_imputed_val)**2 * (1 - all_masks_val))) / np.sum(1 - all_masks_val)
+    # print("MICE, imputation RMSE on val implementation Claude", RMSE_iter_val)
 
-    images_imputed = imp_rf.fit_transform(all_images_missing)
+    # estimator = RandomForestRegressor(n_estimators=100)
+    # imp_rf = IterativeImputer(estimator=estimator)
 
-    RMSE_iter = np.sqrt(np.sum(all_images_true - images_imputed) ** 2 * (1 - all_masks)) / np.sum(1 - all_masks)
-    print("missForest, imputation RMSE on train ", RMSE_iter)
-    images_imputed_val = imp_rf.transform(all_images_missing_val)
-    RMSE_iter_val = np.sqrt(np.sum(all_images_true_val - images_imputed_val) ** 2 * (1 - all_masks_val)) / np.sum(1 - all_masks_val)
-    print("missForest, imputation RMSE on val ", RMSE_iter_val)
+    # images_imputed = imp_rf.fit_transform(all_images_missing)
+
+    # RMSE_iter = np.sqrt(np.sum(all_images_true - images_imputed) ** 2 * (1 - all_masks)) / np.sum(1 - all_masks)
+    # print("missForest, imputation RMSE on train ", RMSE_iter)
+    # images_imputed_val = imp_rf.transform(all_images_missing_val)
+    # RMSE_iter_val = np.sqrt(np.sum(all_images_true_val - images_imputed_val) ** 2 * (1 - all_masks_val)) / np.sum(1 - all_masks_val)
+    # print("missForest, imputation RMSE on val ", RMSE_iter_val)
 

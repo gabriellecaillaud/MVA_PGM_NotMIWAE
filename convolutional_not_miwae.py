@@ -429,7 +429,7 @@ if __name__ == "__main__":
     calib_config = [
         {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 8,
          'n_hidden': 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
-         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : None, 'transform': 'ZeroRedTransform', 'hidden_dims' : [64,128,256]},
+         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : None, 'transform': 'ZeroBlueTransform', 'hidden_dims' : [64,128,256]},
         ][-1]
 
 

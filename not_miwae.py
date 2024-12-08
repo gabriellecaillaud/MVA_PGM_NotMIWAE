@@ -135,6 +135,8 @@ class BernoulliDecoderMiss(nn.Module):
             self.W              = nn.Parameter(torch.randn(1, 1, d))  # Initialize W parameter
             self.b              = nn.Parameter(torch.randn(1, 1, d))  # Initialize b parameter
 
+        print(f"Number of parameters in the BernouilliDecoderMiss: {sum (p.numel() if p.requires_grad else 0 for p in self.parameters()) }")
+
     def forward(self, z):
         if self.missing_process == 'selfmasking':
             logits      = - self.W * (z - self.b)

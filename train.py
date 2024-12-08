@@ -118,7 +118,7 @@ if __name__ == "__main__":
                     {'model': 'not_miwae','dataset_name':  'cancer', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking_known', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 't'},
                     {'model': 'not_miwae', 'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'linear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
                     {'model': 'miwae', 'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
-                    {'model': 'not_miwae', 'dataset_name':  'cancer', 'lr': 1e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 16, 'n_hidden': 128, 'n_latent': 28, 'missing_process':'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
+                    {'model': 'not_miwae', 'dataset_name':  'cancer', 'lr': 1e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 16, 'n_hidden': 128, 'n_latent': 28, 'missing_process':'linear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
 
                     ][-1]
 
@@ -188,6 +188,7 @@ if __name__ == "__main__":
     else:
         raise ValueError('Name of the model to train incorrect.')
     model.to(device)
+    print(f"Number of parameters in the model: {sum (p.numel() if p.requires_grad else 0 for p in model.parameters()) }")
     optimizer = torch.optim.Adam(model.parameters(), lr=calib_config['lr'], weight_decay=calib_config['weight_decay'], betas=calib_config['betas'])
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
                                                     max_lr = calib_config['lr'],

@@ -5,15 +5,15 @@ import pandas as pd
 from torch.utils.data import TensorDataset, DataLoader
 import datetime
 from code.common.data_imputation import compute_imputation_rmse_miwae,compute_imputation_rmse_not_miwae
-from miwae import get_MIWAE, Miwae
-from not_miwae import notMIWAE, get_notMIWAE
+from code.code_UCI_experiments.miwae import get_MIWAE, Miwae
+from code.code_UCI_experiments.not_miwae import notMIWAE, get_notMIWAE
 from sklearn.model_selection import train_test_split
 import logging
-from introduce_missing_data import introduce_missing_superior_to_mean
+from code.code_UCI_experiments.introduce_missing_data import introduce_missing_superior_to_mean
 from code.common.utils import seed_everything
 
 
-def train_notMIWAE(model, train_loader, val_loader, optimizer, scheduler, num_epochs, total_samples_x_train, device):
+def train_notMIWAE(model, train_loader, val_loader, optimizer, scheduler, num_epochs, total_samples_x_train, device, date):
     model.to(device)
     os.makedirs("temp", exist_ok=True)
     best_val_loss = np.inf
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     print(f"calib_config:{calib_config}")
     logging.info("Starting training")
     if calib_config['model'] == 'not_miwae':
-        train_notMIWAE(model, train_loader=train_loader, val_loader=val_loader, optimizer=optimizer, scheduler = scheduler, num_epochs = calib_config['epochs'], total_samples_x_train=total_samples_x_train, device = device)
+        train_notMIWAE(model, train_loader=train_loader, val_loader=val_loader, optimizer=optimizer, scheduler = scheduler, num_epochs = calib_config['epochs'], total_samples_x_train=total_samples_x_train, device = device, date=date)
         torch.save(model.state_dict(), f"temp/not_miwae_{date}_last_epoch.pt")
     elif calib_config['model'] == 'miwae':
         train_MIWAE(model, train_loader=train_loader, val_loader=val_loader, optimizer=optimizer, scheduler = scheduler, num_epochs = calib_config['epochs'], total_samples_x_train=total_samples_x_train, device = device)

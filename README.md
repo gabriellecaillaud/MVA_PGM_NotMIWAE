@@ -41,13 +41,22 @@ As presented in our report, we tackle two types of experiments.
 │   ├───run.batch
 ├───datasets
 │   ├───cancer-dataset
+├───demo_CIFAR_experiments.txt
+├───demo_UCI_experiments.txt
+├───project_report.pdf
 ├───README.md
 ├───Requirements.txt
 
 
-
 ```
-### Experiments on CIFAR-10
+In addition of the source code, we wrote two files that provide the reader an easy way to reproduce some results:
+`demo_CIFAR_experiments.py` and `demo_UCI_experiments.ipynb`
+The demo for the experiments on CIFAR is a python script and not a notebook, because we did all experiments on CIFAR using a GPU and we are not able to run a notebook on our GPU.
+
+### Results on the CIFAR-10 dataset
+Here are our results on the CIFAR-10 dataset. More information is provided in the [project report](project_report.pdf)
+![cifar10_results](figures/comparison_plot_on_missing_blue_data_models_trained_on_blue_vs_green_and_mean_baseline.png)
+
 
 
 

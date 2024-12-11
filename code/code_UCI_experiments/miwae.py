@@ -3,7 +3,7 @@ import torch
 import torch.distributions as dist
 import torch.nn.functional as F
 
-from not_miwae import VAEncoder, GaussDecoder, BernoulliDecoder, TDecoder
+from code.code_UCI_experiments.not_miwae import VAEncoder, GaussDecoder, BernoulliDecoder, TDecoder
 
 
 class Miwae(nn.Module):

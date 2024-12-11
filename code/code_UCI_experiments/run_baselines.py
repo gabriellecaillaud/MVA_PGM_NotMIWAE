@@ -1,5 +1,4 @@
 import pandas as pd
-from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.ensemble import RandomForestRegressor
 import numpy as np
@@ -7,8 +6,8 @@ import datetime
 
 from sklearn.model_selection import train_test_split
 
-from introduce_missing_data import  introduce_missing_mean_values,introduce_missing, introduce_missing_extreme_values
-from utils import seed_everything
+from introduce_missing_data import introduce_missing_superior_to_mean
+from code.common.utils import seed_everything
 
 if __name__ == "__main__":
     date = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
@@ -16,7 +15,7 @@ if __name__ == "__main__":
     print('Run baselines')
     seed_everything(0)
     # white wine
-    data = np.array(pd.read_csv('datasets/cancer-dataset/Cancer_Data.csv', low_memory=False, sep=','))
+    data = np.array(pd.read_csv('../../datasets/cancer-dataset/Cancer_Data.csv', low_memory=False, sep=','))
 
     # Split data into features and target (assuming target is the last column)
     X_data = data[:, 2:-2]  # Features
@@ -36,8 +35,8 @@ if __name__ == "__main__":
     Xval = (Xval - mean_train) / std_train
 
     # Introduce missing data to features (only in X, not y)
-    Xnan_train, Xz_train = introduce_missing(Xtrain)  # Assuming introduce_missing is defined elsewhere
-    Xnan_val, Xz_val = introduce_missing(Xval)
+    Xnan_train, Xz_train = introduce_missing_superior_to_mean(Xtrain)  # Assuming introduce_missing is defined elsewhere
+    Xnan_val, Xz_val = introduce_missing_superior_to_mean(Xval)
 
     # Create missing data masks (1 if present, 0 if missing)
     Strain = np.array(~np.isnan(Xnan_train), dtype=np.float32)

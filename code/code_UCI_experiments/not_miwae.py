@@ -279,6 +279,7 @@ def get_notMIWAE(n_samples_importance_sampling, lpxz, lpmz, lqzx, lpz):
 
 # Losses
 
+
 def gauss_loss(x, s, mu, log_sig2):
     """ Gauss as p(x | z) """
     eps = torch.finfo(torch.float32).eps
@@ -287,6 +288,7 @@ def gauss_loss(x, s, mu, log_sig2):
                   - 0.5 * (x - mu) ** 2 / (torch.exp(log_sig2) + eps)
 
     return torch.sum(p_x_given_z * s, dim=-1)  # sum over d-dimension
+
 
 def bernoulli_loss(x, s, y):
     eps         = torch.finfo(torch.float32).eps
@@ -303,5 +305,3 @@ def bernoulli_loss_miss(x, y):
 def KL_loss(q_mu, q_log_sig2):
     kl          = 1 + q_log_sig2 - q_mu ** 2 - torch.exp(q_log_sig2)
     return - 0.5 * torch.sum(kl, dim=1)
-
-

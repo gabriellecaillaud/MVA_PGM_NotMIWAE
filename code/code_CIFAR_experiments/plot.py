@@ -3,16 +3,17 @@ from torch.utils.data import Subset
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from convolutional_not_miwae import ConvNotMIWAE
+
+from code.code_CIFAR_experiments.model import ConvNotMIWAE
+
 import matplotlib.pyplot as plt
 from pathlib import Path
 import torch.nn as nn
-from data_imputation import compute_imputation_rmse_not_miwae, softmax
-from not_miwae import get_notMIWAE, notMIWAE
-from not_miwae_cifar import ZeroBlueTransform, ZeroRedTransform,  ZeroPixelWhereBlueTransform, ZeroGreenTransform
-from utils import seed_everything
-from cifar10_baselines import mean_imputation_and_rmse
-
+from code.common.data_imputation import softmax
+from code.code_UCI_experiments.not_miwae import notMIWAE
+from code.code_CIFAR_experiments.transforms import ZeroBlueTransform, ZeroRedTransform,  ZeroPixelWhereBlueTransform, ZeroGreenTransform
+from code.common.utils import seed_everything
+from code.code_CIFAR_experiments.baselines import mean_imputation_and_rmse
 
 
 def plot_images(transform_name):
@@ -57,6 +58,7 @@ def plot_images(transform_name):
 
     plt.tight_layout()
     plt.show()
+
 
 def plot_images_with_imputation(model_path, is_conv_model, calib_config, number_of_images=4):
 
@@ -158,6 +160,7 @@ def plot_images_with_imputation(model_path, is_conv_model, calib_config, number_
 
     plt.tight_layout()
     plt.savefig(f"temp/plot_{Path(model_path).stem}_res_{date}.png")
+
 
 def plot_images_with_imputation_comparison_between_models(model_path1, is_conv_model1, calib_config1, model_path2, is_conv_model2, calib_config2, number_of_images=4):
 

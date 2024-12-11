@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def introduce_missing(X):
+def introduce_missing_superior_to_mean(X):
     print("Introducing missing data with > mean")
     N, D = X.shape
     Xnan = X.copy()

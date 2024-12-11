@@ -1,18 +1,7 @@
-import datetime
-
-import numpy as np
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
 import torch.distributions as dist
-import torchvision
-from torch.utils.data import Subset
-from torchvision import transforms
-
-from data_imputation import compute_imputation_rmse_conv_not_miwae
-from not_miwae import get_notMIWAE
-from not_miwae_cifar import ZeroBlueTransform, ZeroPixelWhereBlueTransform, ZeroGreenTransform, ZeroRedTransform
-from utils import seed_everything
 
 
 class ConvVAEncoder(nn.Module):
@@ -165,6 +154,7 @@ class ConvGaussDecoder(nn.Module):
         eps = torch.randn_like(mu)
         return mu + std * eps * self.get_beta()
 
+
 class BernoulliDecoderLinearMiss(nn.Module):
     def __init__(self, n_hidden, missing_process):
         super(BernoulliDecoderLinearMiss, self).__init__()
@@ -189,10 +179,17 @@ class BernoulliDecoderLinearMiss(nn.Module):
             self.W = nn.Parameter(torch.randn(1, self.flat_dim))
             self.b = nn.Parameter(torch.randn(1, self.flat_dim))
 
+        elif missing_process == "conv":
+            self.conv1 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=3, padding=1)
+
+        elif missing_process == "2conv":
+            self.conv1 = nn.Conv2d(in_channels=3, out_channels=n_hidden, kernel_size=3, padding=1)
+            self.conv2 = nn.Conv2d(in_channels=n_hidden, out_channels=3, kernel_size=3, padding=1)
+
     def forward(self, z):
         # z shape: (N, 3, 32, 32)
         batch_size = z.shape[0]
-        
+
         # Flatten the input
         z_flat = z.view(batch_size, -1)  # Shape: (N, 3*32*32)
 
@@ -200,8 +197,8 @@ class BernoulliDecoderLinearMiss(nn.Module):
             logits = -self.W * (z_flat - self.b)
 
         elif self.missing_process == 'selfmasking_known':
-            W_softplus = F.softplus(self.W)
-            logits = -W_softplus * (z_flat - self.b)
+            w_softplus = F.softplus(self.W)
+            logits = -w_softplus * (z_flat - self.b)
 
         elif self.missing_process == 'linear':
             logits = self.fc1(z_flat)
@@ -210,60 +207,22 @@ class BernoulliDecoderLinearMiss(nn.Module):
             h = torch.tanh(self.fc1(z_flat))
             logits = self.fc2(h)
 
+        elif self.missing_process == "conv":
+
+            logits = self.conv1(z)
+
+        elif self.missing_process == '2conv':
+            h = torch.tanh(self.conv1(z))
+            logits = self.conv2(h)
+
         else:
-            print("Use 'selfmasking', 'selfmasking_known', 'linear' or 'nonlinear' as 'missing_process'")
+            print("Use 'selfmasking', 'selfmasking_known', 'linear', 'nonlinear', 'conv'  or '2conv' as 'missing_process'")
             logits = None
 
         # Reshape back to image dimensions
         logits = logits.view(batch_size, 3, 32, 32)
 
         return logits
-
-class BernoulliDecoderConvMiss(nn.Module):
-    def __init__(self, n_hidden, missing_process):
-        super(BernoulliDecoderConvMiss, self).__init__()
-        self.n_hidden = n_hidden
-        self.missing_process = missing_process
-        print(f"Using BernoulliDecoderConvMiss with missing_process {self.missing_process}")
-        # Calculate flattened dimension for a single image
-        self.flat_dim = 3 * 32 * 32
-
-        if missing_process == 'linear':
-            # Using Conv2d instead of Linear for spatial structure preservation
-            self.conv1 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=3, padding=1)
-
-        elif missing_process == 'nonlinear':
-            # Two convolutional layers with intermediate hidden channels
-            self.conv1 = nn.Conv2d(in_channels=3, out_channels=n_hidden, kernel_size=3, padding=1)
-            self.conv2 = nn.Conv2d(in_channels=n_hidden, out_channels=3, kernel_size=3, padding=1)
-
-        elif missing_process in ['selfmasking', 'selfmasking_known']:
-            # Reshape W and b to match image dimensions
-            self.W = nn.Parameter(torch.randn(1, 3, 32, 32))  # One weight per spatial location and channel
-            self.b = nn.Parameter(torch.randn(1, 3, 32, 32))  # One bias per spatial location and channel
-
-    def forward(self, z):
-        # z shape: (N, 3, 32, 32)
-
-        if self.missing_process == 'selfmasking':
-            logits = -self.W * (z - self.b)
-
-        elif self.missing_process == 'selfmasking_known':
-            W_softplus = F.softplus(self.W)
-            logits = -W_softplus * (z - self.b)
-
-        elif self.missing_process == 'linear':
-            logits = self.conv1(z)
-
-        elif self.missing_process == 'nonlinear':
-            h = torch.tanh(self.conv1(z))
-            logits = self.conv2(h)
-
-        else:
-            print("Use 'selfmasking', 'selfmasking_known', 'linear' or 'nonlinear' as 'missing_process'")
-            logits = None
-
-        return logits  # Output shape: (N, 3, 32, 32)
 
 
 class ConvNotMIWAE(nn.Module):
@@ -305,7 +264,7 @@ class ConvNotMIWAE(nn.Module):
 
         # Missing process decoder
         self.missing_decoder = BernoulliDecoderLinearMiss(
-            n_hidden = 512, missing_process = self.missing_process
+            n_hidden=512, missing_process=self.missing_process
         )
 
     def forward(self, x, s, n_samples_importance_sampling):
@@ -371,138 +330,3 @@ class ConvNotMIWAE(nn.Module):
         log_p_z = torch.sum(prior.log_prob(z), dim=-1)
 
         return mu, log_p_x_given_z, log_p_s_given_x, log_q_z_given_x, log_p_z
-
-
-def train_conv_notMIWAE_on_cifar10(model, train_loader, val_loader, optimizer, scheduler, num_epochs,
-                              total_samples_x_train, device, date):
-    model.to(device)
-    best_val_loss = np.inf
-    for epoch in range(num_epochs):
-        model.train()
-        train_loss = 0
-        train_rmse = 0
-        for batch_idx, data in enumerate(train_loader):
-            model.train()
-            x, s, xtrue = data[0]
-            x, s, xtrue = x.to(device), s.to(device), xtrue.to(device)
-            optimizer.zero_grad()
-            mu, lpxz, lpmz, lqzx, lpz = model(x, s, total_samples_x_train)
-            loss = -get_notMIWAE(total_samples_x_train, lpxz, lpmz, lqzx, lpz)
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            train_loss += loss.item()
-
-            model.eval()
-            # compute rmse on batch
-            with torch.no_grad():
-                batch_rmse = compute_imputation_rmse_conv_not_miwae(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
-                train_rmse += batch_rmse
-
-        train_loss /= len(train_loader)
-        train_rmse /= len(train_loader)
-
-        model.eval()
-        val_loss = 0
-        val_rmse = 0
-        with torch.no_grad():
-            for data in val_loader:
-                x, s, xtrue = data[0]
-                x, s, xtrue = x.to(device), s.to(device), xtrue.to(device)
-                mu, lpxz, lpmz, lqzx, lpz = model(x, s, total_samples_x_train)
-                loss = -get_notMIWAE(total_samples_x_train, lpxz, lpmz, lqzx, lpz)
-                val_loss += loss.item()
-                batch_rmse = compute_imputation_rmse_conv_not_miwae(mu, lpxz, lpmz, lqzx, lpz, xtrue, s)
-                val_rmse += batch_rmse
-        val_loss /= len(val_loader)
-        val_rmse /= len(val_loader)
-
-        if val_loss < best_val_loss:
-            torch.save(model.state_dict(), f"temp/not_miwae_{date}_best_val_loss.pt")
-
-        print(
-            f'Epoch {(epoch + 1):4.0f}, Train Loss: {train_loss:8.4f} , Train rmse: {train_rmse:7.4f} , Val Loss: {val_loss:8.4f} , Val RMSE: {val_rmse:7.4f}  last value of lr: {scheduler.get_last_lr()[-1]:.4f}')
-
-
-
-if __name__ == "__main__":
-    calib_config = [
-        {'model': 'not_miwae', 'lr': 1e-3, 'epochs': 100, 'pct_start': 0.1, 'final_div_factor': 1e4, 'batch_size': 8,
-         'n_hidden': 512, 'n_latent': 128, 'missing_process': 'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999),
-         'random_seed': 0, 'out_dist': 'gauss', 'dataset_size' : None, 'transform': 'ZeroBlueTransform', 'hidden_dims' : [64,128,256]},
-        ][-1]
-
-
-    if calib_config['transform'] == 'ZeroBlueTransform':
-        transform = transforms.Compose([
-            transforms.ToTensor(),  # Converts PIL image to tensor
-            ZeroBlueTransform(do_flatten=False)
-        ])
-    elif calib_config['transform'] == 'ZeroGreenTransform':
-        transform = transforms.Compose([
-            transforms.ToTensor(),  # Converts PIL image to tensor
-            ZeroGreenTransform(do_flatten=False)
-        ])
-    elif calib_config['transform'] == 'ZeroRedTransform':
-        transform = transforms.Compose([
-            transforms.ToTensor(),  # Converts PIL image to tensor
-            ZeroRedTransform(do_flatten=False)
-        ])
-    elif calib_config['transform'] == 'ZeroPixelWhereBlueTransform':
-        transform = transforms.Compose([
-            transforms.ToTensor(),  # Converts PIL image to tensor
-            ZeroPixelWhereBlueTransform(do_flatten=False)
-        ])
-    else:
-        raise KeyError('Transforms is not correctly defined.')
-    batch_size = calib_config['batch_size']
-
-    if calib_config['dataset_size'] is not None:
-        # set download to True if this is the first time you are running this file
-        train_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=True,
-                                                download=False, transform=transform), torch.arange(calib_config['dataset_size']))
-
-        test_set = Subset(torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=False,
-                                                       download=False, transform=transform), torch.arange(calib_config['dataset_size']))
-    else:
-        train_set = torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=True,
-                                                download=False, transform=transform)
-
-        test_set = torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=False,
-                                                       download=False, transform=transform)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
-                                              shuffle=True, num_workers=2)
-
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size,
-                                             shuffle=False, num_workers=2)
-
-    date = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    print(date)
-
-
-
-    seed_everything(calib_config['random_seed'])
-
-    device = "cuda" if torch.cuda.is_available() else 'cpu'
-    print(f"Using device: {device}")
-    model = ConvNotMIWAE(n_latent=calib_config['n_latent'],
-            activation=nn.ReLU(),
-            out_activation=nn.Sigmoid(),
-            hidden_dims= calib_config['hidden_dims'],
-            missing_process=calib_config['missing_process'])
-
-    model.to(device)
-    print(f"Number of parameters in the model: {sum (p.numel() if p.requires_grad else 0 for p in model.parameters()) }")
-    optimizer = torch.optim.Adam(model.parameters(), lr=calib_config['lr'], weight_decay=calib_config['weight_decay'], betas=calib_config['betas'])
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
-                                                    max_lr = calib_config['lr'],
-                                                    epochs = calib_config['epochs'],
-                                                    steps_per_epoch= len(train_loader),
-                                                    pct_start= calib_config['pct_start'],
-                                                    # final_div_factor=calib_config['final_div_factor']
-                                                    )
-    print(f"calib_config:{calib_config}")
-    train_conv_notMIWAE_on_cifar10(model=model, train_loader=train_loader, val_loader=test_loader, optimizer=optimizer, scheduler=scheduler, num_epochs = calib_config['epochs'], total_samples_x_train= 10, device=device, date=date )
-
-
-

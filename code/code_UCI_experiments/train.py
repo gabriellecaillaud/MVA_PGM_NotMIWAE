@@ -1,19 +1,21 @@
 import torch
+import os
 import numpy as np
 import pandas as pd
 from torch.utils.data import TensorDataset, DataLoader
 import datetime
-from data_imputation import compute_imputation_rmse_miwae,compute_imputation_rmse_not_miwae
+from code.common.data_imputation import compute_imputation_rmse_miwae,compute_imputation_rmse_not_miwae
 from miwae import get_MIWAE, Miwae
 from not_miwae import notMIWAE, get_notMIWAE
 from sklearn.model_selection import train_test_split
 import logging
-from introduce_missing_data import introduce_missing_extreme_values, introduce_missing_mean_values, introduce_missing
-from utils import seed_everything
+from introduce_missing_data import introduce_missing_superior_to_mean
+from code.common.utils import seed_everything
 
 
 def train_notMIWAE(model, train_loader, val_loader, optimizer, scheduler, num_epochs, total_samples_x_train, device):
     model.to(device)
+    os.makedirs("temp", exist_ok=True)
     best_val_loss = np.inf
     for epoch in range(num_epochs):
         model.train()
@@ -118,18 +120,18 @@ if __name__ == "__main__":
                     {'model': 'not_miwae','dataset_name':  'cancer', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking_known', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 't'},
                     {'model': 'not_miwae', 'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'linear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
                     {'model': 'miwae', 'dataset_name':  'white_wine', 'lr': 5e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 32, 'n_hidden': 128, 'n_latent': 10, 'missing_process':'selfmasking', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
-                    {'model': 'not_miwae', 'dataset_name':  'cancer', 'lr': 1e-4, 'epochs' : 500, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 16, 'n_hidden': 128, 'n_latent': 28, 'missing_process':'linear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
+                    {'model': 'not_miwae', 'dataset_name':  'cancer', 'lr': 1e-4, 'epochs' : 2, 'pct_start': 0.2, 'final_div_factor': 1e4, 'batch_size': 16, 'n_hidden': 128, 'n_latent': 28, 'missing_process':'linear', 'weight_decay': 0, 'betas': (0.9, 0.999), 'random_seed': 0, 'out_dist': 'gauss'},
 
                     ][-1]
 
     seed_everything(calib_config['random_seed'])
 
     if calib_config['dataset_name'] == 'cancer':
-        data = np.array(pd.read_csv('datasets/cancer-dataset/Cancer_Data.csv', low_memory=False, sep=','))
+        data = np.array(pd.read_csv('../../datasets/cancer-dataset/Cancer_Data.csv', low_memory=False, sep=','))
         X_data = data[:, 2:-2]  # Features
 
     elif calib_config['dataset_name'] == 'white_wine':
-        data = np.array(pd.read_csv('datasets/winequality-white.csv', low_memory=False, sep=';'))
+        data = np.array(pd.read_csv('../../datasets/winequality-white.csv', low_memory=False, sep=';'))
         X_data = data[:, :-1]  # Features. Not using the last colomn since it's the target
 
     else:
@@ -149,8 +151,8 @@ if __name__ == "__main__":
     Xval = (Xval - mean_train) / std_train
 
     # Introduce missing data to features
-    Xnan_train, Xz_train    = introduce_missing(Xtrain)
-    Xnan_val, Xz_val        = introduce_missing(Xval)
+    Xnan_train, Xz_train    = introduce_missing_superior_to_mean(Xtrain)
+    Xnan_val, Xz_val        = introduce_missing_superior_to_mean(Xval)
 
     # Create missing data masks (1 if present, 0 if missing)
     Strain  = torch.tensor(~np.isnan(Xnan_train), dtype=torch.float32)
